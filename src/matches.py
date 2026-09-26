@@ -39,17 +39,18 @@ import re
 
 # Poids des critères, par type d'opportunité.
 #
-# Chaque type totalise 100 une fois tous ses critères écrits. Les poids sont
-# déclarés ici une fois pour toutes : un critère pas encore écrit n'est pas
-# noté, il ne fait pas grimper le score. Le maximum atteignable est donc
-# aujourd'hui 85 pour un programme et 100 pour une bourse.
-#   programs      : + langue 15, non écrit, aucune source ne publie `language`
-#   scholarships  : complet
+# Chaque type totalise 100. Les poids sont déclarés ici une fois pour toutes :
+# un critère pas encore écrit n'est pas noté, il ne fait pas grimper le score.
+# Le maximum atteignable est donc 85 sur 100 pour un programme tant qu'aucune
+# source ne publie `language`.
+#   programs      : domaine 50, diplome 20, pays 15, langue 15
+#   scholarships  : complet, 100
 CRITERES = {
     "programs": {
         "domaine": 50,
         "diplome": 20,
         "pays": 15,
+        "langue": 15,
     },
     "scholarships": {
         "niveau": 40,
@@ -107,6 +108,15 @@ RESTRICTIONS_NATIONALES = ("citizen", "domestic", "national student", "home stud
 
 # Mots qui signalent une prise en charge complète des frais de scolarité.
 FINANCEMENT_COMPLET = ("full", "complete", "waiver", "coverage")
+
+# Le profil dit « anglais oui, français non », la page dit « taught in English ».
+# Il faut donc traduire la clé du profil en mots que les pages écrivent. La
+# liste est courte et vérifiée : c'est le maximum que le code peut faire sans
+# demander de comprendre une langue.
+TRADUCTIONS_LANGUE = {
+    "english_program": ("english", "anglais"),
+    "french_program": ("french", "francais", "français"),
+}
 
 
 def variantes(terme):
@@ -288,17 +298,27 @@ def mesure_domaine(opportunity, profil, points):
 def mesure_diplome(opportunity, profil, points):
     """Le diplôme proposé est-il l'un de ceux que le profil recherche ?
 
+    Le champ `degree` est lu en premier. Quand la source ne le publie pas, le
+    titre est utilisé à la place : « International Master in Contemporary
+    Challenges » est une information publiée, pas une devinette. C'est une
+    source plus faible qu'un champ dédié, donc le motif affiché dit lequel des
+    deux a été lu.
+
     KAIST publie trois niveaux pour un même programme. C'est normal : un
     programme qui existe en Master et en doctorat convient à qui vise le
     Master.
     """
     diplome = opportunity.degree
+    origine = "diplôme"
+    if not diplome:
+        diplome = opportunity.title
+        origine = "titre"
     if not diplome:
         return _mesure("diplome", 0, "diplôme non publié")
 
     if niveau_atteignable(diplome, profil["target_degree"]):
-        return _mesure("diplome", points, f"diplôme {diplome}")
-    return _mesure("diplome", 0, f"diplôme {diplome}, hors de la liste visée")
+        return _mesure("diplome", points, f"{origine} {diplome}")
+    return _mesure("diplome", 0, f"{origine} {diplome}, hors de la liste visée")
 
 
 def mesure_niveau(opportunity, profil, points):
@@ -382,6 +402,27 @@ def mesure_pays(opportunity, profil, points):
     return _mesure("pays", 0, f"pays {pays}, hors de la liste préférée")
 
 
+def mesure_langue(opportunity, profil, points):
+    """La langue d'enseignement est-elle de celles que le profil accepte ?
+
+    Le critère est écrit et vérifié sur des cas de test, mais il ne peut pas
+    être validé sur une vraie page tant qu'aucune source ne renseigne
+    `language`. Les quatre sources actives la laissent toutes vide. C'est dit ici
+    pour que le code et le budget restent d'accord sur ce qui est vérifié et ce
+    qui ne l'est pas.
+    """
+    langue = opportunity.language
+    if not langue:
+        return _mesure("langue", 0, "langue non publiée")
+
+    for cle, mots in TRADUCTIONS_LANGUE.items():
+        if not profil["preferences"].get(cle):
+            continue
+        if any(contient_mot(langue, mot) for mot in mots):
+            return _mesure("langue", points, f"langue {langue}")
+    return _mesure("langue", 0, f"langue {langue}, hors de la liste acceptée")
+
+
 def _mesure(nom, points, raison):
     """Une mesure de critère, dans la forme commune à toutes les mesures.
 
@@ -400,6 +441,7 @@ MESURES = {
     "international": mesure_international,
     "financement": mesure_financement,
     "pays": mesure_pays,
+    "langue": mesure_langue,
 }
 
 

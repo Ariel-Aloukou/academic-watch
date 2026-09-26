@@ -32,6 +32,17 @@
       "selectors": {
         "container": ".board_wrap"
       }
+    },
+    {
+      "name": "EACEA - Erasmus Mundus catalogue",
+      "university": "Erasmus Mundus",
+      "base_url": "https://www.eacea.ec.europa.eu",
+      "selectors": {
+        "item": "article.ecl-card",
+        "title": ".ecl-content-block__title .ecl-link__label",
+        "description": ".ecl-content-block__description",
+        "url": ".ecl-content-block__title a"
+      }
     }
   ]
 }

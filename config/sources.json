@@ -134,7 +134,7 @@
       "country": "Europe",
       "type": "programs",
       "url": "https://www.eacea.ec.europa.eu/scholarships/erasmus-mundus-catalogue_en",
-      "enabled": false
+      "enabled": true
     },
     {
       "name": "Campus China",
