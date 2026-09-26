@@ -33,6 +33,14 @@
       "enabled": false
     },
     {
+      "name": "KAIST - Scholarship",
+      "category": "universite",
+      "country": "South Korea",
+      "type": "scholarships",
+      "url": "https://admission.kaist.ac.kr/intl-graduate/FinancialSupport/Scholarship/KAISTScholarship",
+      "enabled": true
+    },
+    {
       "name": "UBC - Graduate programs",
       "category": "universite",
       "country": "Canada",

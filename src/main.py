@@ -4,7 +4,7 @@ Orchestration (docs/VERSIONS.md) :
 
     V0.1  chargement de la configuration   -> display_profile()
     V0.2  collecte des sources             -> collect_opportunities()
-    V0.3  filtrage                         -> filters.py   (pas encore fait)
+    V0.3  correspondance avec le profil    -> matches.py   (evaluer)
     V0.4  sauvegarde                       -> storage.py   (pas encore fait)
     V0.5  détection des nouveautés         -> storage.py   (pas encore fait)
     V0.6  notification                    -> notifier.py  (pas encore fait)
@@ -65,11 +65,16 @@ def display_opportunities(opportunities):
         print(f"{number}. {opportunity.title}")
         print(f"   Université : {opportunity.university}")
         print(f"   Pays        : {opportunity.country}")
-        print(f"   Diplôme     : {opportunity.degree}")
-        # Toutes les sources n'affichent pas les domaines de recherche : on
-        # n'affiche la ligne que si la donnée a été trouvée.
+        # Une bourse n'annonce pas de diplôme, et certaines pages de programmes
+        # n'affichent pas leurs domaines de recherche. Afficher « None » ferait
+        # croire à une valeur : la ligne n'est imprimée que si la donnée a été
+        # trouvée.
+        if opportunity.degree:
+            print(f"   Diplôme     : {opportunity.degree}")
         if opportunity.field:
             print(f"   Domaines    : {opportunity.field}")
+        if opportunity.funding_type:
+            print(f"   Financement : {opportunity.funding_type}")
         print(f"   Lien        : {opportunity.url}")
         print()
 

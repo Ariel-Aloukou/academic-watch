@@ -17,13 +17,19 @@ Ce module a deux rôles distincts :
 * extraire les opportunités des sources qui le sont, avec
   collect_opportunities().
 
-Le filtrage arrive en V0.3 (filters.py), la sauvegarde en V0.4
-(storage.py), voir docs/VERSIONS.md.
+La correspondance avec le profil arrive en V0.3 (matches.py), la sauvegarde
+en V0.4 (storage.py), voir docs/VERSIONS.md.
+
+Une source dont la structure ne s'exprime pas en sélecteurs CSS déclare un
+"parser" dans config/selectors.json. Le module correspondant est alors
+appelé à la place de la lecture générique ; c'est le cas de la page
+Scholarship de KAIST. Voir src/parsers/kaist_scholarship.py.
 
 Règle importante de docs/README.md §9 : une source doit être aussi fiable que
 possible. On privilégie donc les sites officiels des universités.
 """
 
+import importlib
 import json
 import re
 from datetime import datetime, timezone
@@ -364,8 +370,33 @@ def build_opportunity(element, source):
     )
 
 
+def charger_parseur(nom):
+    """Charge un parseur dédié depuis src/parsers/.
+
+    Un parseur n'est nécessaire que lorsque la structure HTML ne peut pas
+    être exprimée en sélecteurs CSS. La page Scholarship de KAIST en est
+    l'exemple : le nom de la bourse et ses détails sont deux éléments
+    frères, et aucun sélecteur ne peut les apparier.
+
+    Le parseur est choisi par son nom dans config/selectors.json, jamais
+    comparé ici : c'est ce qui permet d'ajouter une source qui pose problème
+    sans modifier ce fichier.
+    """
+    return importlib.import_module(f"parsers.{nom}").parse
+
+
 def parse_source(html, source):
-    """Transforme le HTML d'une source en liste d'opportunités."""
+    """Transforme le HTML d'une source en liste d'opportunités.
+
+    Deux chemins, choisis par la configuration et non par le code :
+
+    * par défaut, la lecture générique par sélecteurs CSS ;
+    * si la source déclare un "parser", un module dédié de src/parsers/ est
+      appelé à sa place.
+    """
+    if "parser" in source:
+        return charger_parseur(source["parser"])(html, source)
+
     soup = BeautifulSoup(html, "html.parser")
     return [
         opportunity

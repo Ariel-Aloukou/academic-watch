@@ -23,6 +23,15 @@
         "field": ".dv-researchAreas span",
         "url": "a.homeIcon"
       }
+    },
+    {
+      "name": "KAIST - Scholarship",
+      "university": "KAIST",
+      "base_url": "https://admission.kaist.ac.kr",
+      "parser": "kaist_scholarship",
+      "selectors": {
+        "container": ".board_wrap"
+      }
     }
   ]
 }
