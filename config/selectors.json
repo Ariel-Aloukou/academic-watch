@@ -1,0 +1,28 @@
+{
+  "sources": [
+    {
+      "name": "TUM - Degree programs",
+      "university": "Technical University of Munich",
+      "base_url": "https://www.tum.de",
+      "selectors": {
+        "item": "article.list-teaser",
+        "title": "h3.h4",
+        "degree": "p.roofline",
+        "description": ".list-teaser__text p",
+        "url": "a[href*='/detail/']"
+      }
+    },
+    {
+      "name": "KAIST - Explore Programs",
+      "university": "KAIST",
+      "base_url": "https://admission.kaist.ac.kr",
+      "selectors": {
+        "item": "ul.ul-accordion > li",
+        "title": "h5.h-accordion-tit span",
+        "degree": ".dv-accordion-info ul li span",
+        "field": ".dv-researchAreas span",
+        "url": "a.homeIcon"
+      }
+    }
+  ]
+}

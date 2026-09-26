@@ -1,0 +1,47 @@
+{
+  "education": {
+    "current_degree": "Licence Réseaux et Télécommunications",
+    "graduation_target": "2027",
+    "academic_level": "Bachelor"
+  },
+
+  "target_degree": [
+    "Master"
+  ],
+
+  "fields": [
+    "Cybersecurity",
+    "Computer Networks",
+    "Network Security",
+    "Telecommunications",
+    "Information Security",
+    "Cloud Security",
+    "Infrastructure Security"
+  ],
+
+  "preferred_countries": [
+    "Canada",
+    "China",
+    "Japan",
+    "South Korea",
+    "Germany",
+    "Norway"
+  ],
+
+  "funding": {
+    "fully_funded": true,
+    "tuition_waiver": true,
+    "partial_scholarship": true
+  },
+
+  "candidate_profile": {
+    "nationality": "Ivorian",
+    "international_student": true
+  },
+
+  "preferences": {
+    "english_program": true,
+    "french_program": true,
+    "application_deadline_after": "2026-10-01"
+  }
+}

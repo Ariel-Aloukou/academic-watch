@@ -1,0 +1,148 @@
+{
+  "sources": [
+    {
+      "name": "TUM - Degree programs",
+      "category": "universite",
+      "country": "Germany",
+      "type": "programs",
+      "url": "https://www.tum.de/en/studies/degree-programs",
+      "enabled": true
+    },
+    {
+      "name": "NTNU - Master's programmes in English",
+      "category": "universite",
+      "country": "Norway",
+      "type": "programs",
+      "url": "https://www.ntnu.edu/studies/international/master",
+      "enabled": false
+    },
+    {
+      "name": "KAIST - Explore Programs",
+      "category": "universite",
+      "country": "South Korea",
+      "type": "programs",
+      "url": "https://admission.kaist.ac.kr/intl-graduate/Discover/ExplorePrograms",
+      "enabled": true
+    },
+    {
+      "name": "KAIST - Eligibility Requirements",
+      "category": "universite",
+      "country": "South Korea",
+      "type": "eligibility",
+      "url": "https://admission.kaist.ac.kr/intl-graduate/Admission/Eligibility",
+      "enabled": false
+    },
+    {
+      "name": "UBC - Graduate programs",
+      "category": "universite",
+      "country": "Canada",
+      "type": "programs",
+      "url": "https://grad.ubc.ca/programs/",
+      "enabled": false
+    },
+    {
+      "name": "EduCanada - Programmes",
+      "category": "organisme_officiel",
+      "country": "Canada",
+      "type": "programs",
+      "url": "https://www.educanada.ca/programs-programmes/index.aspx?lang=eng",
+      "enabled": true
+    },
+    {
+      "name": "EduCanada - Bourses internationales",
+      "category": "organisme_officiel",
+      "country": "Canada",
+      "type": "scholarships",
+      "url": "https://www.educanada.ca/scholarships-bourses/non_can/index.aspx?lang=en",
+      "enabled": true
+    },
+    {
+      "name": "DAAD - Scholarship Database",
+      "category": "organisme_officiel",
+      "country": "Germany",
+      "type": "scholarships",
+      "url": "https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/",
+      "enabled": true
+    },
+    {
+      "name": "Study in Japan",
+      "category": "organisme_officiel",
+      "country": "Japan",
+      "type": "programs",
+      "url": "https://www.studyinjapan.go.jp/en/",
+      "enabled": true
+    },
+    {
+      "name": "Study in Japan - MEXT",
+      "category": "organisme_officiel",
+      "country": "Japan",
+      "type": "scholarships",
+      "url": "https://www.studyinjapan.go.jp/en/planning/scholarships/mext-scholarships/",
+      "enabled": true
+    },
+    {
+      "name": "Study in Japan - Scholarships",
+      "category": "organisme_officiel",
+      "country": "Japan",
+      "type": "scholarships",
+      "url": "https://www.studyinjapan.go.jp/en/planning/scholarships/",
+      "enabled": true
+    },
+    {
+      "name": "Study in Korea - Scholarships",
+      "category": "organisme_officiel",
+      "country": "South Korea",
+      "type": "scholarships",
+      "url": "https://studyinkorea.go.kr/ko/plan/scholarship.do",
+      "enabled": true
+    },
+    {
+      "name": "Study in Korea",
+      "category": "organisme_officiel",
+      "country": "South Korea",
+      "type": "programs",
+      "url": "https://www.studyinkorea.go.kr/",
+      "enabled": true
+    },
+    {
+      "name": "Study in Norway",
+      "category": "organisme_officiel",
+      "country": "Norway",
+      "type": "programs",
+      "url": "https://studyinnorway.no/study-opportunities",
+      "enabled": true
+    },
+    {
+      "name": "Erasmus Mundus Joint Masters",
+      "category": "organisme_officiel",
+      "country": "Europe",
+      "type": "scholarships",
+      "url": "https://erasmus-plus.ec.europa.eu/opportunities/individuals/students/erasmus-mundus-joint-masters",
+      "enabled": true
+    },
+    {
+      "name": "EACEA - Erasmus Mundus catalogue",
+      "category": "organisme_officiel",
+      "country": "Europe",
+      "type": "programs",
+      "url": "https://www.eacea.ec.europa.eu/scholarships/erasmus-mundus-catalogue_en",
+      "enabled": false
+    },
+    {
+      "name": "Campus China",
+      "category": "organisme_officiel",
+      "country": "China",
+      "type": "scholarships",
+      "url": "https://www.campuschina.org/",
+      "enabled": true
+    },
+    {
+      "name": "Study in China - CSC",
+      "category": "organisme_officiel",
+      "country": "China",
+      "type": "scholarships",
+      "url": "https://studyinchina.csc.edu.cn/",
+      "enabled": true
+    }
+  ]
+}

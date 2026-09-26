@@ -1,0 +1,17 @@
+# Environnement virtuel
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Secrets / config locale
+.env
+config/*.local.json
+
+# Système
+.DS_Store
+Thumbs.db
