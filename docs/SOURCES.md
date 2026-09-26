@@ -434,69 +434,85 @@ fiche. Elles annoncent ce qu'il faut aller vérifier, pas ce qui est acquis.
 | `language` | oui | à vérifier | oui |
 | `eligibility` | oui | non | oui |
 
-## 6.3 Correction : aucune source ne publie de deadline
+## 6.3 La deadline : mesurée, pas supposée
 
-Ce tableau annonçait `deadline: oui` pour EACEA et MEXT. **C'était faux, et
-l'est encore sur la page d'EACEA après implémentation.** La colonne du
-validateur comptait la présence de liens, pas la présence de dates.
+Ce tableau annonçait `deadline: oui` pour EACEA et MEXT. **C'était faux.** La
+colonne du validateur comptait la présence de liens, pas la présence de dates.
 
-Vérifié le 2026-09-26, par recherche du mot dans le texte rendu de la page :
+Deux pistes ont été vérifiées le 2026-09-26. Aucune des deux n'aboutit, mais
+elles ne sont pas closes de la même façon, et la distinction compte.
 
-| Page | `deadline` | `application` | `2025` ou `2026` |
-| ---- | ---------- | ------------- | ---------------- |
-| EACEA, catalogue | 0 occurrence | — | — |
-| EACEA, fiche projet Erasmus+ | 0 | 0 | 0 |
-| MEXT, page des bourses | 0 | 10 | 0 |
+**D'abord, une coquille JavaScript ne se mesure pas comme une page.** Une page
+qui répond 200 avec 170 Ko et zéro année peut être soit une page qui ne parle
+pas de dates, soit une page dont le contenu n'est pas dans le HTML. La part de
+texte visible par rapport à la taille de la page départage les deux.
 
-Autrement dit : **le critère `deadline` n'est pas implémentable avec le
-registre actuel.** Ce n'est pas un critère difficult à écrire, c'est un critère
-sans donnée. Écrire un lecteur de dates dans ces conditions produirait du code
-jamais exécuté sur une vraie valeur, exactement comme l'extraction de
-`funding_amount` a été refusée.
+| Page | HTTP | Ko | Texte visible | Part | Années | Contenu réel |
+| ---- | ---- | -- | ------------- | ---- | ------ | ------------- |
+| EACEA, catalogue | 200 | 180 | 24 Ko | 13 % | 12 | oui |
+| MEXT, page des bourses | 200 | 28 | 10,6 Ko | 37 % | 0 | oui |
+| EACEA, fiche projet Erasmus+ | 200 | 167 | 2,7 Ko | 1,6 % | 0 | **non, coquille JS** |
+| Erasmus+, opportunities | 200 | 184 | 2,5 Ko | 1,4 % | 0 | **non, coquille JS** |
+
+Les deux premières pages ont un contenu réel et ne publient aucune date limite.
+Les deux dernières ne sont pas lisibles par une simple requête, donc leur
+« zéro occurrence » ne prouve rien : c'est un artefact de lecture, pas une
+propriété de la source. **C'est la correction à retenir de cette section.**
+
+**Ensuite, la piste AUF est fermée.** Les quatre URL testées répondent `HTTP
+403` : le portail bloque les requêtes automatisées. Ce n'est pas une piste
+prometteuse, c'est une source écartée, comme `MasterStudies` en §4.
+
+**Reste la piste Erasmus+, et elle est partiellement ouverte.** Le service que
+la page appelle lui-même a été trouvé en lisant le code de l'app Vue :
+
+```text
+https://ec.europa.eu/programmes/service/search/project/search
+```
+
+Il répond, sans authentification, avec un corps qui contient un index
+(`eplus2021`). Il rend **345 302 projets** avec de vraies dates :
+
+```text
+projectName            2024-2-SK02-KA152-YOU-000258278
+projectTitle           Staying alive
+projectStartDate       2024-09-08T22:00:00.000+0000
+projectEndDate         2025-09-07T22:00:00.000+0000
+projectPublicationDate 2024-10-15T10:29:49.504+0000
+projectCallYear        2024
+```
+
+Mais ce sont des **dates de vie d'un projet financé**, pas des dates de
+candidature : `projectStartDate` dit quand la mobilité a commencé, pas quand un
+étudiant pouvait postuler. Sur ces enregistrements, `dateDeadline` et
+`dateOpening` sont **absents**, alors que le modèle de l'app Vue les prévoit :
+ils appartiennent aux *appels à projets*, une autre famille d'enregistrements
+dont le service n'a pas été trouvé.
+
+Deux raisons de ne pas en faire une source, donc, même si le service
+fonctionne :
+
+* ce sont des projets, pas des programmes de Master. Une mobilité de jeunes
+  intitulée « Staying alive » n'est pas une opportunité d'études ;
+* les seules dates disponibles sont des dates de projet, qui ne rempliraient
+  pas le critère `deadline` sans déformer son sens.
+
+**Conclusion, qui n'a pas changé mais qui est maintenant mesurée :** le critère
+`deadline` n'est pas implémentable avec le registre actuel. Ce n'est pas un
+critère difficile à écrire, c'est un critère sans donnée. Écrire un lecteur de
+dates dans ces conditions produirait du code jamais exécuté sur une vraie
+valeur, exactement comme l'extraction de `funding_amount` a été refusée.
 
 Conséquence sur le profil : `preferences.application_deadline_after` n'est
 donc utilisée par rien. Elle est laissée dans `config/profile.json` parce
 qu'elle est vraie et qu'elle le sera le jour où une source publication des
-dates. Les deux pistes réelles sont :
+dates.
 
-* une source dont la page **liste des dates** : les portails de l'AUF, du
-  DAAD dans leur version ouverte, ou les pages de département ;
-* Erasmus+ a une API et une vue « opportunities » qui publient des dates, à
-  vérifier avant d'y invested du temps.
-
-Tant que ces deux pistes ne sont pas vérifiées, le critère reste non écrit, et
-c'est écrit.
-
-Conséquence pour la V0.3 : la correspondance ne peut pas reposer sur `field`
-pour TUM et UBC. Elle compare le titre, le domaine et la description aux
-domaines du profil. C'est le rôle de `src/matches.py`, écrit, mais qui ne
-retient pour l'instant que trois critères : domaine, diplôme et pays.
-
----
-
-# 7. Ordre d'implémentation recommandé
-
-Une version doit fonctionner avant la suivante (docs/VERSIONS.md).
-
-| Ordre | Source | Raison |
-| ----- | ------ | ------ |
-| 1 | TUM | **Faite** en V0.2, sert de référence technique |
-| 2 | KAIST programmes | **Faite** en V0.2, 36 opportunités, correspondance directe au profil |
-| 2 | KAIST bourses | **Faite**, 3 bourses, premier cas de parseur dédié |
-| 4 | EACEA catalogue | **Faite avant NTNU**, 20 opportunités. L'ordre a été inversé sur la foi du tableau §6.2, qui annonçait des deadlines : ce tableau était faux (§6.3). EACEA a donc été implémentée pour une autre raison, et une seule des 20 correspond au profil, « Master's Programme in Cybersecurity and Assurance », en correspondance directe |
-| 3 | NTNU | Prochaine étape. Correspondance optimale, information d'éligibilité UE/EEE, mais ne publie ni `deadline` ni `language` d'après la mesure |
-| 5 | UBC | Le plus gros volume, mais ne publie pas de `field` : à déduire |
-| 6 | Study in Japan – MEXT | Seule source de financement déjà validée |
-| 7 | Study in Norway, sous-page ICT | Piste non explorée, à valider d'abord |
-
-EACEA a été implémentée avant NTNU, donc hors de l'ordre de ce tableau. La
-raison est écrite ici pour que l'écart soit explicite : l'ordre venait d'un
-tableau d'attentes qui s'est révélé faux, et le tableau a été corrigé plutôt
-que l'ordre justifié par une raison inventée.
-
-Les trois premières sources ont été terminées sans une seule ligne de code
-propre à un site dans `src/scraper.py`, hormis le parseur KAIST, lui-même
-choisi par la configuration. C'est la preuve que l'architecture tient.
+**La piste qui reste ouverte** est celle des pages qui listent des dates dans
+leur HTML : les pages de département d'université, et les portails qui
+ressemblent à une liste statique. C'est le profil des sources qui ont déjà
+réussi, TUM et KAIST. Elle ne se vérifie pas à l'avance : il faut la
+rencontrer.
 
 ## Le cas du parseur dédié
 
