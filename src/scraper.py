@@ -364,6 +364,10 @@ def build_opportunity(element, source):
         university=source["university"],
         country=source["country"],
         source=source["name"],
+        # Ce que l'opportunité est. La correspondance ne pose pas les mêmes
+        # questions à un programme et à une bourse, et elle ne doit pas relire
+        # le registre pour le savoir.
+        type=source["type"],
         # docs/README.md §10 : on conserve la date de collecte pour permettre
         # une vérification humaine plus tard.
         collected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),

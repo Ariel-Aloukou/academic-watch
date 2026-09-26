@@ -466,6 +466,39 @@ Un cas reste ouvert et assumé : le **collège** de KAIST n'est pas extractible.
 Il est écrit dans un `<h4>` qui est frère du `<ul>` parent, donc hors de portée
 d'un sélecteur. Il n'a pas été deviné.
 
+## Ce que la page Scholarship a appris sur le reste du projet
+
+Cette page a produit trois enseignements qui ne concernent pas KAIST.
+
+**Un critère peut dépendre du type d'opportunité.** Une bourse n'annonce pas de
+matière. Exiger un domaine d'une bourse écarte toutes les bourses, ce qui est
+arrivé : les 3 bourses étaient rejetées, dont deux sont des prises en charge
+complète des frais. La correspondance porte maintenant deux listes de critères,
+une par type. Voir `docs/VERSIONS.md` V0.3.
+
+**Les pages n'utilisent pas les mêmes caractères que le code.** KAIST écrit
+« Master’s » avec une apostrophe typographique. Une règle construite sur
+l'apostrophe ASCII ne s'applique pas à la même chaîne, si bien que la bourse de
+Master était rejetée comme doctorale. Les apostrophes sont normalisées avant
+toute comparaison.
+
+**Un sous-chaîne n'est pas un mot.** « undergraduate » contient « graduate ».
+Une bourse de premier cycle serait passée pour une bourse de Master. Les
+niveaux de diplôme sont donc cherchés mot entier.
+
+## Une décision de profil à ne pas défaire
+
+`Infrastructure Security` a pour termes faibles « Resilient Infrastructure » et
+« Smart Infrastructure ». Ils font correspondre *Civil and Environmental
+Engineering* et *Graduate School of Mobility* à 45 points, qui sont des
+programmes de génie civil et non de sécurité.
+
+C'est **voulu** : ces domaines font partie du profil de l'étudiant, et
+l'infrastructure est un sujet qu'il suit. Ces correspondances contextuelles
+sont signalées comme telles dans les raisons, ce qui permet de les voir et de
+les écarter d'un regard. Ne pas les « corriger » en retirant les termes : ce
+serait supprimer une décision du profil à cause d'un classement imparfait.
+
 ---
 
 # 8. Répartition dans le code

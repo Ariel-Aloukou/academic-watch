@@ -4,8 +4,9 @@ Veille académique : recherche de programmes de Master et de financements
 correspondant à un profil, sur des sources officielles.
 
 Le projet en est à la **V0.3** : trois sources sont extraites, la correspondance
-avec le profil existe mais ne porte encore que sur trois critères. Tout ce qui
-n'est pas fait est indiqué comme tel ci-dessous.
+avec le profil classe les opportunités et explique pourquoi. Sur les
+49 opportunités collectées, 8 correspondent au profil. Tout ce qui n'est pas
+fait est indiqué comme tel ci-dessous.
 
 ## État réel
 
@@ -13,7 +14,7 @@ n'est pas fait est indiqué comme tel ci-dessous.
 | ------- | ----- | ---- |
 | V0.1 | Chargement et affichage du profil | fait |
 | V0.2 | Collecte et extraction des sources | fait, 3 sources, 49 opportunités |
-| V0.3 | Correspondance avec le profil | à moitié, 3 critères sur 7 |
+| V0.3 | Correspondance avec le profil | fait, 8 retenues sur 49, reste la langue |
 | V0.4 | Sauvegarde des résultats | à faire |
 | V0.5 | Détection des nouveautés | à faire |
 | V0.6 | Notification | à faire |
@@ -77,6 +78,12 @@ Collecter et afficher les opportunités :
 ```bash
 python src/main.py
 ```
+
+Chaque opportunité est affichée avec son score et la raison de chaque critère,
+et `[OUI]` ou `[non]` indique si elle est retenue. Un programme et une bourse
+ne sont pas mesurés de la même façon : un programme se juge sur sa matière, une
+bourse sur qui peut en bénéficier. Les détails sont dans `docs/VERSIONS.md`
+V0.3.
 
 Vérifier que les sources du registre sont réellement lisibles :
 

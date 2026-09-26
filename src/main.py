@@ -16,6 +16,7 @@ modules dans le bon ordre (docs/README.md §6).
 import json
 from pathlib import Path
 
+from matches import evaluer
 from scraper import collect_opportunities
 
 # Chemin calculé depuis ce fichier pour fonctionner quel que soit le dossier
@@ -50,19 +51,25 @@ def display_profile(profile):
         display_values(values)
 
 
-def display_opportunities(opportunities):
+def display_opportunities(paires):
     """Affiche les opportunités trouvées par le scraper.
 
-    C'est le résultat attendu de la V0.2. Les informations absentes ne sont pas
-    affichées plutôt que d'être inventées (docs/README.md §7).
+    C'est le résultat attendu de la V0.2, complété par la correspondance de la
+    V0.3. Les informations absentes ne sont pas affichées plutôt que d'être
+    inventées (docs/README.md §7).
+
+    `paires` associe chaque opportunité à son évaluation, pour que le score
+    soit lu au même endroit que les données qui l'ont produit.
     """
+    retenues = sum(1 for _, resultat in paires if resultat["matched"])
     print()
     print("=== Opportunités trouvées ===")
-    print(f"{len(opportunities)} opportunités trouvées")
+    print(f"{len(paires)} opportunités trouvées, {retenues} correspondent au profil")
     print()
 
-    for number, opportunity in enumerate(opportunities, start=1):
-        print(f"{number}. {opportunity.title}")
+    for number, (opportunity, resultat) in enumerate(paires, start=1):
+        marque = "OUI" if resultat["matched"] else "non"
+        print(f"{number}. {opportunity.title}   [{marque}]")
         print(f"   Université : {opportunity.university}")
         print(f"   Pays        : {opportunity.country}")
         # Une bourse n'annonce pas de diplôme, et certaines pages de programmes
@@ -75,14 +82,37 @@ def display_opportunities(opportunities):
             print(f"   Domaines    : {opportunity.field}")
         if opportunity.funding_type:
             print(f"   Financement : {opportunity.funding_type}")
+        # Le score n'a de sens que rapporté au maximum du type : 85 sur 100
+        # pour un programme et 100 sur 100 pour une bourse ne se comparent pas.
+        print(
+            f"   Score       : {resultat['score']} / {resultat['score_max']}"
+            f" ({resultat['type']})"
+        )
+        for raison in resultat["reasons"]:
+            print(f"     - {raison}")
         print(f"   Lien        : {opportunity.url}")
         print()
 
 
 def main():
     """Enchaîne les étapes dans l'ordre défini par docs/VERSIONS.md."""
-    display_profile(load_profile())
-    display_opportunities(collect_opportunities())
+    profile = load_profile()
+    display_profile(profile)
+
+    # La correspondance est faite ici, et non dans le scraper : comparer au
+    # profil n'est pas extraire une page. Les deux étapes restent séparées.
+    paires = []
+    for opportunity in collect_opportunities():
+        resultat = evaluer(opportunity, profile)
+        # L'évaluation est recopiée sur l'opportunité, comme le prévoyait
+        # models.py, pour que la sauvegarde n'ait pas à la refaire.
+        opportunity.score = resultat["score"]
+        opportunity.score_max = resultat["score_max"]
+        opportunity.matched = resultat["matched"]
+        opportunity.matched_criteria = resultat["reasons"]
+        paires.append((opportunity, resultat))
+
+    display_opportunities(paires)
 
 
 if __name__ == "__main__":

@@ -81,6 +81,7 @@ def construire(nom, champs, source):
         university=source["university"],
         country=source["country"],
         source=source["name"],
+        type=source["type"],
         # Le texte Benefits est conservé mot pour mot, montant compris.
         funding_type=champs.get("Benefits"),
         funding_amount=None,

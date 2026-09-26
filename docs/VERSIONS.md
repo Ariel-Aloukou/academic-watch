@@ -129,22 +129,57 @@ Fait :
 
 * trois paliers de correspondance sur le domaine (`direct`, `strong`, `weak`),
   déclarés dans `config/profile.json` ;
-* score sur 100, budget des points déclaré dans le module ;
-* raisons en toutes lettres, pour que l'étudiant puisse lire pourquoi un
-  programme lui est proposé.
+* score, budget des points déclaré dans le module, raison en toutes lettres
+  pour chaque critère ;
+* étudiants internationaux ;
+* financement.
 
 Reste à écrire :
 
-* étudiants internationaux ;
-* financement ;
-* langue ;
-* deadline.
+* langue (aucune source ne publie encore `language`, donc le critère est absent
+  du budget plutôt que noté 0 : le maximum atteignable est 85 sur 100) ;
+* deadline, qu'aucune des trois sources actives ne publie.
 
-Un cas que le filtrage devra traiter à part : les 3 bourses KAIST sont
-aujourd'hui écartées, faute de domaine. Une bourse n'annonce pas de matière, et
-« est-ce une bourse ? » n'est pas la question que pose un profil de recherche.
-La façon de traiter ce cas n'est pas décidée ; elle ne doit pas être tranchée
-en même temps que le reste.
+## Deux listes de critères, et pourquoi
+
+Un programme et une bourse ne posent pas la même question, donc ils ne sont pas
+mesurés de la même façon.
+
+Un programme se juge sur sa **matière** : c'est le domaine qui décide. Une
+bourse n'annonce **aucune matière** : elle se juge sur qui peut en bénéficier.
+Exiger un domaine d'une bourse écarterait toutes les bourses, ce qui est
+exactement le défaut constaté sur la page Scholarship de KAIST, où les trois
+bourses étaient rejetées alors que deux d'entre elles sont des prises en charge
+complète des frais.
+
+| Type | Critères retenants | Critères qui classent |
+| ---- | ------------------ | -------------------- |
+| `programs` | `domaine` | `diplome`, `pays` |
+| `scholarships` | `niveau`, `international` | `financement`, `pays` |
+
+Ce sont des listes de critères et non un seuil de score : la question n'est pas
+« combien » mais « quelle matière » ou « qui peut en bénéficier ».
+
+Le type vient de `config/sources.json` et est recopié sur l'opportunité par le
+scraper, pour que la correspondance n'ait pas à relire le registre.
+
+## Le piège du diplôme composé
+
+La page Scholarship de KAIST écrit « Master’s-Ph.D. Integrated programs », ce
+qui est un diplôme différent de « Master’s ». Deux règles sont nécessaires,
+et chacune a été vérifiée sur un cas réel :
+
+* « Master's-Ph.D. Integrated » est retiré avant de chercher « Master ».
+  Sinon une bourse de doctorat passerait pour une bourse de Master, puisque le
+  mot Master y figure ;
+* « undergraduate » contient « graduate ». Une recherche par sous-chaîne
+  ferait passer une bourse de premier cycle pour une bourse de Master. Les
+  niveaux de diplôme sont donc cherchés mot entier.
+
+Résultat mesuré sur les 3 bourses KAIST : 2 retenues à 100/100, et la bourse
+`KAIST Prestige Scholarship for International Ph.D. Students` rejetée à 60/100
+avec la raison « réservée à un niveau doctoral ». C'est le bon résultat : un
+étudiant de Master ne peut pas en profiter.
 
 ## Résultat attendu
 
@@ -162,7 +197,21 @@ Opportunités non compatibles
 
 `matched` est la porte, `score` ne classe que parmi les retenues : un
 programme sans correspondance de domaine peut obtenir des points de diplôme
-et de pays, et ne doit pas pour autant remonter dans la liste.
+et de pays, et ne doit pas pour autant remonter dans la liste. Un score n'a de
+sens que rapporté au maximum de son type : 85 sur 100 pour un programme et
+100 sur 100 pour une bourse ne se comparent pas.
+
+État mesuré : **8 retenues sur 49** opportunités, 6 programmes et 2 bourses.
+
+## Une limite assumée
+
+Une bourse qui restreint les départements acceptés n'est pas vérifiée sur le
+domaine : le critère `domaine` ne fait pas partie du budget `scholarships`.
+Aucune source active n'est dans ce cas aujourd'hui, la page KAIST indiquant
+« All departments ». Le jour où une bourse nomme des départements, il faudra
+lire le département dans la liste `Departments Accepting Applications:` et le
+traiter comme un critère supplémentaire. Ce n'est pas fait, et ne doit pas
+être deviné.
 
 ---
 

@@ -238,6 +238,22 @@ sites au profil ferait du profil un miroir des pages surveillées. `fields` rest
 la définition de l'objectif, `related_terms` porte le vocabulaire que les
 universités utilisent pour le désigner.
 
+Les critères dépendent du **type** de l'opportunité, déclaré par la source dans
+`config/sources.json` et recopié sur l'opportunité. Un programme se juge sur sa
+matière, une bourse sur qui peut en bénéficier : exiger un domaine d'une bourse
+écarterait toutes les bourses.
+
+| Type | Critères | Total |
+| ---- | -------- | ----- |
+| `programs` | `domaine` 50, `diplome` 20, `pays` 15 | 85 |
+| `scholarships` | `niveau` 40, `international` 25, `financement` 20, `pays` 15 | 100 |
+
+Un critère pas encore écrit est absent du budget plutôt que noté 0 : le
+maximum atteignable est donc 85 pour un programme tant que la langue n'est pas
+écrite. Les poids sont déclarés une fois pour toutes, donc l'ajout d'un critère
+plus tard n'attribue pas rétrosactivement des points aux collectes
+antérieures.
+
 ---
 
 ## `src/storage.py`
