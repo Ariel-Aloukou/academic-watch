@@ -19,6 +19,37 @@
     "Infrastructure Security"
   ],
 
+  "related_terms": {
+    "Cybersecurity": {
+      "strong": ["Secure Computing", "Computer Security", "Cyber Security"],
+      "weak": ["Security Engineering", "Information Assurance", "Trusted Computing"]
+    },
+    "Computer Networks": {
+      "strong": ["Systems-Networks", "Network Systems", "Computer Communication", "Networking"],
+      "weak": ["Distributed Systems", "Network Engineering", "Computer Communication Networks"]
+    },
+    "Network Security": {
+      "strong": ["System Security", "Secure Network"],
+      "weak": ["Cryptography", "Intrusion Detection", "Network Forensics"]
+    },
+    "Telecommunications": {
+      "strong": ["Telecommunication Systems", "Wireless Communication", "Communication Systems"],
+      "weak": ["Communication", "Signal Processing", "Mobile Computing"]
+    },
+    "Information Security": {
+      "strong": ["Software Security", "System Security"],
+      "weak": ["Cryptography", "Privacy", "Data Protection"]
+    },
+    "Cloud Security": {
+      "strong": ["Cloud Computing Security", "Cloud Infrastructure Security"],
+      "weak": ["Cloud Computing", "Multi-Cloud Security"]
+    },
+    "Infrastructure Security": {
+      "strong": ["Critical Infrastructure Security", "Cyber-Physical Systems Security"],
+      "weak": ["Resilient Infrastructure", "Smart Infrastructure"]
+    }
+  },
+
   "preferred_countries": [
     "Canada",
     "China",
