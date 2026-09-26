@@ -269,6 +269,27 @@ Au début, des fichiers JSON suffisent.
 
 Il n'est pas nécessaire d'utiliser une base de données.
 
+### Ce que la V0.4 a décidé
+
+Deux questions que le cahier des charges posait sans y répondre : *qu'est-ce
+qui identifie une opportunité ?* et *pourquoi deux fichiers ?*
+
+**L'identité est `source` + titre normalisé + diplôme normalisé.** Pas l'URL.
+L'URL est la propriété du site et non de l'opportunité, et une identité fondée
+sur elle ferait que tout semble nouveau dès qu'un site réorganise ses chemins.
+Le diplôme a été ajouté après une **collision mesurée** : TUM publie deux
+programmes nommés « Aerospace », un Master of Science et un Bachelor of Science,
+et sans lui le Bachelor disparaissait de l'historique. L'identité est écrite en
+clair dans le fichier, sans hachage, pour qu'une fusion puisse être contestée à
+l'œil.
+
+**Les deux fichiers ne sont pas redondants.** `opportunities.json` contient tout
+ce qui a été collecté, y compris ce qui ne correspond pas au profil, car une
+offre écartée aujourd'hui peut intéresser le jour où le profil change.
+`seen.json` contient ce qui a déjà été *montré* à l'utilisateur. Savoir qu'une
+opportunité existe et savoir qu'on l'a déjà signalée sont deux informations
+différentes, et la seconde est la seule qui évite de la répéter indéfiniment.
+
 ---
 
 ## `src/notifier.py`

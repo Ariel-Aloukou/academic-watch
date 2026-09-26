@@ -270,6 +270,92 @@ Le programme doit pouvoir :
 * charger les anciennes opportunités ;
 * détecter les doublons.
 
+## État mesuré
+
+Les trois points sont faits. `src/storage.py` fait 200 lignes et ne dépend
+d'aucune bibliothèque externe.
+
+**Identité : `source` + titre normalisé + diplôme normalisé.** C'est la seule
+vraie décision de la version, et elle a été reprise sur une mesure et non sur
+un principe. La règle naturelle, `source` + titre, perd une opportunité : TUM
+publie deux programmes appelés « Aerospace », un Master of Science et un Bachelor
+of Science, et le Bachelor était écrasé par le Master. Mesuré sur les 69
+opportunités réelles :
+
+| Règle | Identités distinctes | Opportunités perdues |
+| ----- | -------------------- | --------------------- |
+| source + titre | 68 | 1 |
+| source + titre + diplôme | 69 | 0 |
+
+L'URL est écartée volontairement. Elle est publiée par les 69 opportunités
+comme le titre, mais elle est la propriété du site : les 20 URL d'EACEA pointent
+vers des sites de programmes tiers, et une identité fondée sur l'URL ferait que
+tout semble nouveau dès qu'un site réorganise ses chemins. Pour une veille,
+l'erreur grave n'est pas de rater une nouveauté, c'est d'en annoncer soixante.
+L'URL reste enregistrée dans chaque fiche.
+
+**Limite connue, écrite dans le module.** KAIST publie trois niveaux pour un même
+programme, joints en une seule chaîne par `read_texts`. Si l'ordre de cette liste
+change un jour, les 36 identités KAIST changent avec, et ces opportunités
+paraîtront nouvelles une fois. Deux collectes consécutives n'ont montré aucune
+variation de ce genre, et c'est mesuré, mais la page reste sous le contrôle de
+KAIST. C'est le compromis assumé du diplôme dans l'identité : il évite de perdre
+une opportunité, au prix d'en pouvoir créer une par accident.
+
+**Les deux fichiers répondent à deux questions différentes.** Une opportunité est
+collectée même quand elle ne correspond pas au profil, donc
+`opportunities.json` contient des éléments que `seen.json` ne contiendra jamais.
+Et changer son profil ne doit pas re-signaler les 69 opportunités déjà vues : ce
+garantit `seen.json`, pas `opportunities.json`.
+
+**Un fichier illisible arrête le programme.** `StockageInvalide` est levée si un
+fichier de données existe mais n'est pas lisible, et le fichier n'est pas
+touché. Repartir d'un historique vide ne se verrait pas : les 69 opportunités
+passeraient pour nouvelles, et la veille annoncerait d'un coup tout ce qu'elle
+a toujours annoncé. Une erreur visible vaut mieux qu'une inondation fausse. Le
+même raisonnement s'applique à une entrée de `seen.json` qui n'est pas une
+chaîne : elle est refusée, et non ignorée, pour la même raison.
+
+**Le fichier ne change pas quand rien ne change.** `collected_at` est l'heure
+de la collecte, donc il diffère à chaque exécution. Comparer deux fiches sur
+tous leurs champs dirait donc que les 69 ont changé, chaque jour, et le fichier
+serait réécrit sans raison. Une veille quotidienne produirait alors un changement
+par jour quoi qu'il arrive, et on ne distinguerait plus « rien de neuf » d'« une
+information mise à jour ». Les deux horodatages sont donc exclus de la
+comparaison : une fiche identique n'est pas réécrite, et le fichier est
+byte-pour-byte le même. Le coût est une information en moins, la date de dernière
+collecte, qui ne sert à rien tant qu'aucun code ne cherche à savoir si une offre
+a disparu de sa page. Vérifié : deux exécutions consécutives produisent le même
+SHA-256.
+
+**L'écriture est atomique.** Le programme tourne sur un planning et peut être
+interrompu. L'écriture se fait dans un fichier `.tmp` puis remplace la
+destination, donc un JSON tronqué ne peut pas se retrouver sur le disque. Un
+test vérifie qu'aucun `.tmp` ne reste.
+
+**Le fichier reste lisible par un humain** : `ensure_ascii=False` et `indent=2`,
+donc les accents sont écrits tels quels et non en `\u00e9`. Un fichier de données
+qu'on ne peut pas lire sans outillage ne sert à rien à la relecture.
+
+## Vérification
+
+45 cas de test, tous passants. Ils couvrent le cas nominal et surtout ce qui
+brise une sauvegarde : fichier tronqué, JSON valide mais pas une liste,
+`seen.json` au mauvais format, première exécution, dossier absent, opportunité
+qui change de diplôme, titre accentué ou non, deux sources de même titre, et
+deux collectes identiques dont le fichier doit rester identique.
+
+Sur les données réelles : 69 fiches après la première exécution, 69 nouvelles
+annoncées, puis 0 nouvelle et 69 fiches à la seconde. Le programme est
+idempotent.
+
+## Réserve
+
+Ces tests vivent dans un dossier temporaire, hors du dépôt. Ils ont servi à
+construire la version et ils sont reproductibles, mais ils ne sont pas exécutés
+automatiquement : rien ne les rejoue à chaque commit. Les mettre dans le dépôt
+est un travail à faire, et il n'est pas fait.
+
 ---
 
 # V0.5 - Détection des nouvelles opportunités

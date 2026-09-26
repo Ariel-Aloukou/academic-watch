@@ -3,10 +3,10 @@
 Veille académique : recherche de programmes de Master et de financements
 correspondant à un profil, sur des sources officielles.
 
-Le projet en est à la **V0.3** : quatre sources sont extraites, la correspondance
-avec le profil classe les opportunités et explique pourquoi. Sur les
-69 opportunités collectées, 9 correspondent au profil. Tout ce qui n'est pas
-fait est indiqué comme tel ci-dessous.
+Le projet en est à la **V0.4** : quatre sources sont extraites, la correspondance
+avec le profil classe les opportunités et explique pourquoi, et le résultat est
+écrit sur disque. Sur les 69 opportunités collectées, 9 correspondent au profil.
+Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 
 ## État réel
 
@@ -15,18 +15,20 @@ fait est indiqué comme tel ci-dessous.
 | V0.1 | Chargement et affichage du profil | fait |
 | V0.2 | Collecte et extraction des sources | fait, 4 sources, 69 opportunités |
 | V0.3 | Correspondance avec le profil | fait, 9 retenues sur 69 |
-| V0.4 | Sauvegarde des résultats | à faire |
+| V0.4 | Sauvegarde des résultats | fait, 69 fiches et 9 déjà vues |
 | V0.5 | Détection des nouveautés | à faire |
 | V0.6 | Notification | à faire |
 | V0.7 | Passage à l'échelle | à faire |
 
 Deux critères de la V0.3 ne sont pas implémentés, et ne le sont pas par oubli :
-aucune source ne publie de date limite ni de langue d'enseignement. C'est
-vérifié page par page, pas supposé. `docs/SOURCES.md` §6.3 donne le détail.
+aucune source ne renseigne de langue d'enseignement, et aucune ne publie de
+date limite. C'est vérifié page par page, pas supposé ; `docs/SOURCES.md` §6.3
+distingue ce qui a été mesuré négatif de ce qui n'a pas pu être lu.
 
-Le programme fonctionne **en ligne uniquement** : il télécharge les pages au
-moment de l'exécution et n'écrit rien. Aucune donnée n'est conservée d'une
-exécution à l'autre pour l'instant.
+Le programme télécharge les pages au moment de l'exécution et **écrit deux
+fichiers** dans `data/` : l'historique complet et la mémoire de ce qui a déjà
+été montré. Relancer le programme ne signale plus rien de neuf tant que les
+sources n'ont pas changé.
 
 ## Architecture
 
@@ -40,8 +42,8 @@ academic-watch/
 │   ├── sources.json        # Registre des sources à surveiller
 │   └── selectors.json      # Règles d'extraction par source
 ├── data/
-│   ├── opportunities.json  # Opportunités détectées (vide pour l'instant)
-│   └── seen.json           # IDs déjà traités (vide pour l'instant)
+│   ├── opportunities.json  # Historique complet des opportunités, 69 fiches
+│   └── seen.json           # Identités déjà montrées, 9 entrées
 ├── docs/
 │   ├── README.md           # Cahier des charges
 │   ├── VERSIONS.md         # Feuille de route version par version
@@ -54,7 +56,7 @@ academic-watch/
 │   ├── parsers/
 │   │   └── kaist_scholarship.py  # Parseur dédié, structure non exprimable en CSS
 │   ├── matches.py          # Correspondance avec le profil, score, raisons
-│   ├── storage.py          # Vide - V0.4
+│   ├── storage.py          # Historique JSON et détection des doublons
 │   └── notifier.py         # Vide - V0.6
 ├── requirements.txt
 ├── README.md
@@ -88,6 +90,21 @@ et `[OUI]` ou `[non]` indique si elle est retenue. Un programme et une bourse
 ne sont pas mesurés de la même façon : un programme se juge sur sa matière, une
 bourse sur qui peut en bénéficier. Les détails sont dans `docs/VERSIONS.md`
 V0.3.
+
+Cette commande **écrit deux fichiers** dans `data/` :
+
+* `opportunities.json`, l'historique complet. Une opportunité déjà vue garde sa
+  date de première apparition, et ses données sont rafraîchies ;
+* `seen.json`, la mémoire de ce qui a déjà été montré.
+
+Lancer la commande une seconde fois de suite affiche donc `0 nouvelles depuis la
+dernière exécution`, et ne réécrit pas les fichiers : rien n'ayant changé, il
+n'y a rien à écrire. C'est ce qui permettra plus tard à GitHub Actions de ne
+commiter que lorsqu'il y a effectivement quelque chose de nouveau.
+
+Les deux fichiers sont versionnés, parce qu'une veille qui recommence à zéro
+chaque jour ne sert à rien. Pour repartir de zéro, les vider ou les supprimer —
+en sachant que tout sera alors signalé comme nouveau.
 
 Vérifier que les sources du registre sont réellement lisibles :
 
