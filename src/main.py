@@ -5,7 +5,7 @@ Orchestration (docs/VERSIONS.md) :
     V0.1  chargement de la configuration   -> display_profile()
     V0.2  collecte des sources             -> collect_opportunities()
     V0.3  correspondance avec le profil    -> matches.py   (evaluer)
-    V0.4  sauvegarde                       -> storage.py   (pas encore fait)
+    V0.4  sauvegarde                       -> storage.py   (sauvegarder)
     V0.5  détection des nouveautés         -> storage.py   (pas encore fait)
     V0.6  notification                    -> notifier.py  (pas encore fait)
 
@@ -18,6 +18,7 @@ from pathlib import Path
 
 from matches import evaluer
 from scraper import collect_opportunities
+from storage import conserver_vus, sauvegarder
 
 # Chemin calculé depuis ce fichier pour fonctionner quel que soit le dossier
 # depuis lequel le programme est lancé (localement ou via GitHub Actions).
@@ -113,6 +114,24 @@ def main():
         paires.append((opportunity, resultat))
 
     display_opportunities(paires)
+
+    # V0.4. L'historique enregistre tout ce qui a été collecté, y compris ce
+    # qui ne correspond pas au profil : une offre écartée aujourd'hui peut
+    # intéresser le jour où le profil change, et l'écarter définitivement
+    # serait une information perdue.
+    opportunities = [opportunity for opportunity, _ in paires]
+    nouvelles = sauvegarder(opportunities)
+    retenues = [o for o, resultat in paires if resultat["matched"]]
+
+    # `vues` n'est memorise qu'apres l'affichage, pour qu'une opportunite
+    # comptee comme montree l'ait ete. C'est ce qui evite de la re-signaler.
+    conservees = conserver_vus(retenues)
+
+    print()
+    print("=== Sauvegarde ===")
+    print(f"{len(opportunities)} opportunités enregistrées dans data/opportunities.json")
+    print(f"{len(nouvelles)} nouvelles depuis la dernière exécution")
+    print(f"{len(conservees)} opportunités déjà montées, dans data/seen.json")
 
 
 if __name__ == "__main__":
