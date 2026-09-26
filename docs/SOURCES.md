@@ -239,7 +239,7 @@ Sources de `config/sources.json`. **Une seule est exploitable en l'état.**
 | EduCanada – Programmes | programs | 200, 24 Ko, 0 tableau, 0 lien | **Portail de recherche** |
 | EduCanada – Bourses | scholarships | 200, 24 Ko, 0 tableau, 1 lien | **Portail de recherche** |
 | DAAD – Scholarship Database | scholarships | 200, 22 Ko, 5 `<select>` **remplis** | Formulaire de recherche |
-| Campus China | scholarships | HTTP 412 | Bloqué |
+| Campus China | scholarships | erreur de connexion (412 avant) | Injoignable, écarté |
 | Study in China – CSC | scholarships | HTTP 412 | Bloqué |
 
 Ces mesures sont produites par `python src/scraper.py`, qui teste chaque URL du
@@ -347,11 +347,19 @@ rentable du projet.** Les categories 1 et 2 doivent être renforcées en priorit
 | ------- | ------ | ------- |
 | `exploitable` | 7 | TUM, NTNU, KAIST – Eligibility, UBC, EduCanada – Bourses, Study in Japan – MEXT, EACEA |
 | `a_tester` | 10 | KAIST – Explore Programs, KAIST – Scholarship, EduCanada – Programmes, DAAD, Study in Japan x2, Study in Korea x2, Study in Norway, Erasmus Mundus |
-| `bloque` | 2 | Campus China, Study in China – CSC |
+| `bloque` | 1 | Study in China – CSC |
+| `injoignable` | 1 | Campus China |
 
-Deux nuances que le tableau ne montre pas :
+Trois nuances que le tableau ne montre pas :
 
-* **Trois sources implémentées sont classées `a_tester` alors qu'elles
+* **Campus China a changé de verdict entre deux exécutions.** Elle répondait
+  `HTTP 412` quand ce tableau a été écrit, elle ne répond plus du tout
+  aujourd'hui : quatre tentatives, sur `http` et `https`, toutes en erreur de
+  connexion. Un site qui passe de « bloque les robots » à « ne répond pas » ne
+  peut pas être surveillé, quel que soit le verdict affiché. C'est la
+  situation la moins favorable des deux, et c'est celle qui compte ;
+
+* **Deux sources implémentées sont classées `a_tester` alors qu'elles
   produisent des opportunités.** KAIST – Explore Programs et KAIST –
   Scholarship le sont pour la même raison : le validateur cherche des tableaux
   et des liens de fiche, or KAIST présente ses programmes dans un accordéon et
@@ -371,35 +379,93 @@ ces 10 portails gouvernementaux sont des moteurs de recherche, pas des listes.
 
 # 6. Information disponible selon la source
 
-docs/README.md §7 impose de ne pas inventer une information absente. Ce tableau
-indique ce que chaque source retenue peut réellement fournir.
+docs/README.md §7 impose de ne pas inventer une information absente. Ce qui
+suit sépare donc deux choses qu'il ne faut pas confondre : ce qui a été
+**mesuré** en implémentant une source, et ce qui est **attendu** d'après le
+validateur pour une source pas encore lue.
 
-| Information | TUM | NTNU | KAIST | EACEA | UBC | MEXT |
-| ----------- | --- | ---- | ----- | ----- | --- | ---- |
-| `title` | oui | oui | oui | oui | oui | oui |
-| `university` | config | config | config | à extraire | config | non |
-| `country` | config | config | config | à extraire | config | non |
-| `degree` | oui | oui | oui, 3 valeurs | oui | oui | non |
-| `field` | non | à déduire | oui, 26/36 | à déduire | à déduire | non |
-| `url` | oui | oui | site du département | oui | oui | oui |
-| `source` | oui | oui | oui | oui | oui | oui |
-| `deadline` | non | non | non | oui | non | oui |
-| `funding` | non | à vérifier | à extraire | oui | non | oui |
-| `language` | non | oui | oui | oui | à vérifier | oui |
-| `eligibility` | non | oui | oui | oui | non | oui |
+## 6.1 Mesuré, sur les sources implémentées
 
-Deux corrections apportées après implémentation de KAIST :
+Ces chiffres viennent d'une exécution réelle, pas d'une inspection visuelle.
 
-* `deadline` n'est **pas** sur la page de KAIST. Elle indique que les cycles
-  d'admission varient et renvoie vers un tableau d'affichage. Extraire une
-  date depuis cette page reviendrait à inventer ;
-* `degree` contient trois valeurs (`Master's`, `Master's-Ph.D. Integrated`,
-  `Ph.D.`). Le choix se fera en V0.3, pas au moment de l'extraction.
+| Information | TUM (10) | KAIST programmes (36) | KAIST bourses (3) | EACEA (20) |
+| ----------- | -------- | --------------------- | ----------------- | ---------- |
+| `title` | 10/10 | 36/36 | 3/3 | 20/20 |
+| `university` | config | config | config | config |
+| `country` | config | config | config | config |
+| `degree` | 10/10 | 36/36 | 0/3 | 0/20 |
+| `field` | 0/10 | 26/36 | 0/3 | 0/20 |
+| `description` | 10/10 | 0/36 | 3/3 | 20/20 |
+| `url` | 10/10 | 36/36 | 3/3 | 20/20 |
+| `source` | 10/10 | 36/36 | 3/3 | 20/20 |
+| `deadline` | 0/10 | 0/36 | 0/3 | **0/20** |
+| `funding_type` | 0/10 | 0/36 | 3/3 | 0/20 |
+| `language` | 0/10 | 0/36 | 0/3 | 0/20 |
+| `eligibility` | 0/10 | 0/36 | 3/3 | 0/20 |
 
-Ce tableau ne couvre pas la page Scholarship de KAIST, qui n'a pas les mêmes
-champs : elle ne publie ni domaine, ni diplôme, ni date limite, mais elle
-publie `funding` et `eligibility`, que les autres sources donnent plus
-rarement. Le détail est dans §7.
+Trois corrections que ces chiffres imposent :
+
+* **`language` n'est publié par aucune source active.** Le critère existe dans
+  le code et fonctionne, mais il ne peut pas être validé sur une vraie page
+  tant qu'une source ne le renseigne pas ;
+* **`deadline` n'est publié par aucune source active, et c'est définitif.**
+  Voir §6.2 ;
+* le `degree` d'EACEA est vide, mais ses titres contiennent « Master ». Le
+  critère `diplome` lit donc le titre quand le champ dédié est absent, en
+  disant dans la raison lequel des deux il a lu. C'est une information
+  publiée, pas une devinette.
+
+Le `degree` de KAIST contient trois valeurs (`Master's`, `Master's-Ph.D.
+Integrated`, `Ph.D.`). Ce n'est pas une ambiguïté, c'est ce que la page publie,
+et `matches.py` les distingue.
+
+## 6.2 Attendu, sur les sources validées mais pas encore lues
+
+Ces colonnes viennent du validateur, qui compte les tableaux et les liens de
+fiche. Elles annoncent ce qu'il faut aller vérifier, pas ce qui est acquis.
+
+| Information | NTNU | UBC | MEXT |
+| ----------- | ---- | --- | ---- |
+| `title` | oui | oui | oui |
+| `degree` | oui | oui | non |
+| `field` | à déduire | à déduire | non |
+| `deadline` | **non** | **non** | **non** |
+| `funding` | à vérifier | non | oui |
+| `language` | oui | à vérifier | oui |
+| `eligibility` | oui | non | oui |
+
+## 6.3 Correction : aucune source ne publie de deadline
+
+Ce tableau annonçait `deadline: oui` pour EACEA et MEXT. **C'était faux, et
+l'est encore sur la page d'EACEA après implémentation.** La colonne du
+validateur comptait la présence de liens, pas la présence de dates.
+
+Vérifié le 2026-09-26, par recherche du mot dans le texte rendu de la page :
+
+| Page | `deadline` | `application` | `2025` ou `2026` |
+| ---- | ---------- | ------------- | ---------------- |
+| EACEA, catalogue | 0 occurrence | — | — |
+| EACEA, fiche projet Erasmus+ | 0 | 0 | 0 |
+| MEXT, page des bourses | 0 | 10 | 0 |
+
+Autrement dit : **le critère `deadline` n'est pas implémentable avec le
+registre actuel.** Ce n'est pas un critère difficult à écrire, c'est un critère
+sans donnée. Écrire un lecteur de dates dans ces conditions produirait du code
+jamais exécuté sur une vraie valeur, exactement comme l'extraction de
+`funding_amount` a été refusée.
+
+Conséquence sur le profil : `preferences.application_deadline_after` n'est
+donc utilisée par rien. Elle est laissée dans `config/profile.json` parce
+qu'elle est vraie et qu'elle le sera le jour où une source publication des
+dates. Les deux pistes réelles sont :
+
+* une source dont la page **liste des dates** : les portails de l'AUF, du
+  DAAD dans leur version ouverte, ou les pages de département ;
+* Erasmus+ a une API et une vue « opportunities » qui publient des dates, à
+  vérifier avant d'y invested du temps.
+
+Tant que ces deux pistes ne sont pas vérifiées, le critère reste non écrit, et
+c'est écrit.
 
 Conséquence pour la V0.3 : la correspondance ne peut pas reposer sur `field`
 pour TUM et UBC. Elle compare le titre, le domaine et la description aux
@@ -417,15 +483,20 @@ Une version doit fonctionner avant la suivante (docs/VERSIONS.md).
 | 1 | TUM | **Faite** en V0.2, sert de référence technique |
 | 2 | KAIST programmes | **Faite** en V0.2, 36 opportunités, correspondance directe au profil |
 | 2 | KAIST bourses | **Faite**, 3 bourses, premier cas de parseur dédié |
-| 3 | NTNU | Correspondance optimale, information d'éligibilité UE/EEE |
-| 4 | EACEA catalogue | Source officielle, bons rendements |
-| 5 | UBC | Le plus gros volume |
+| 4 | EACEA catalogue | **Faite avant NTNU**, 20 opportunités. L'ordre a été inversé sur la foi du tableau §6.2, qui annonçait des deadlines : ce tableau était faux (§6.3). EACEA a donc été implémentée pour une autre raison, et une seule des 20 correspond au profil, « Master's Programme in Cybersecurity and Assurance », en correspondance directe |
+| 3 | NTNU | Prochaine étape. Correspondance optimale, information d'éligibilité UE/EEE, mais ne publie ni `deadline` ni `language` d'après la mesure |
+| 5 | UBC | Le plus gros volume, mais ne publie pas de `field` : à déduire |
 | 6 | Study in Japan – MEXT | Seule source de financement déjà validée |
 | 7 | Study in Norway, sous-page ICT | Piste non explorée, à valider d'abord |
 
-Les deux premières étapes sont terminées sans une seule ligne de code propre à
-un site dans `src/scraper.py` : KAIST n'a demandé qu'un bloc JSON de plus. C'est
-la preuve que l'architecture tient.
+EACEA a été implémentée avant NTNU, donc hors de l'ordre de ce tableau. La
+raison est écrite ici pour que l'écart soit explicite : l'ordre venait d'un
+tableau d'attentes qui s'est révélé faux, et le tableau a été corrigé plutôt
+que l'ordre justifié par une raison inventée.
+
+Les trois premières sources ont été terminées sans une seule ligne de code
+propre à un site dans `src/scraper.py`, hormis le parseur KAIST, lui-même
+choisi par la configuration. C'est la preuve que l'architecture tient.
 
 ## Le cas du parseur dédié
 

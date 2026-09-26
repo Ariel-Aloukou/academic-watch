@@ -245,14 +245,19 @@ matière, une bourse sur qui peut en bénéficier : exiger un domaine d'une bour
 
 | Type | Critères | Total |
 | ---- | -------- | ----- |
-| `programs` | `domaine` 50, `diplome` 20, `pays` 15 | 85 |
+| `programs` | `domaine` 50, `diplome` 20, `pays` 15, `langue` 15 | 100 |
 | `scholarships` | `niveau` 40, `international` 25, `financement` 20, `pays` 15 | 100 |
 
-Un critère pas encore écrit est absent du budget plutôt que noté 0 : le
-maximum atteignable est donc 85 pour un programme tant que la langue n'est pas
-écrite. Les poids sont déclarés une fois pour toutes, donc l'ajout d'un critère
-plus tard n'attribue pas rétrosactivement des points aux collectes
-antérieures.
+Le maximum **atteignable** est 85 pour un programme et 100 pour une bourse :
+aucune des quatre sources actives ne renseigne `language`, donc 15 points ne
+peuvent pas être gagnés. Les poids sont déclarés une fois pour toutes, donc
+l'ajout d'un critère plus tard n'attribue pas rétrosactivement des points aux
+collectes antérieures.
+
+Le critère `deadline` n'est pas écrit, et pas par oubli : aucune source du
+registre ne publie de date, ce qui a été vérifié page par page. Ce serait donc
+un lecteur de dates jamais exécuté sur une vraie valeur. Voir
+`docs/SOURCES.md` §6.3.
 
 ---
 

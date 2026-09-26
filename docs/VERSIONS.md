@@ -86,6 +86,11 @@ Une troisième source, KAIST – Scholarship, est venue en V0.3. Elle n'a demand
 ni sélecteur, ni ligne dans `scraper.py`, mais un parseur dédié : voir
 `docs/SOURCES.md` §7. Le compte est donc de 49 opportunités.
 
+Une quatrième, EACEA, est venue en dernier et n'a demandé qu'un bloc de
+sélecteurs de plus, toujours sans ligne dans `scraper.py`. Le compte est de
+**69 opportunités**, dont 20 sur un catalogue large où une seule correspond au
+profil. C'est le résultat honnête d'une source utile mais peu ciblée.
+
 ## Résultat attendu
 
 Exemple :
@@ -132,13 +137,30 @@ Fait :
 * score, budget des points déclaré dans le module, raison en toutes lettres
   pour chaque critère ;
 * étudiants internationaux ;
-* financement.
+* financement ;
+* langue.
 
 Reste à écrire :
 
-* langue (aucune source ne publie encore `language`, donc le critère est absent
-  du budget plutôt que noté 0 : le maximum atteignable est 85 sur 100) ;
-* deadline, qu'aucune des trois sources actives ne publie.
+* deadline, **et il n'est pas implémentable aujourd'hui**.
+
+Aucune des quatre sources actives ne publie de date, ce qui a été vérifié page
+par page et non déduit : le catalogue EACEA, la fiche projet Erasmus+ et la
+page MEXT contiennent zéro occurrence de « deadline » et zéro année. Ce n'est
+donc pas un critère difficile à écrire, c'est un critère sans donnée. Écrire un
+lecteur de dates sans jamais l'exécuter sur une vraie valeur produirait du code
+mort, exactement comme l'extraction de `funding_amount` a été refusée.
+
+Le tableau du cahier des sources annonçait l'inverse. Il a été corrigé, avec
+les chiffres de la vérification : `docs/SOURCES.md` §6.3.
+
+Conséquence sur le profil : `preferences.application_deadline_after` n'est
+utilisée par rien. Elle est vraie, et le sera dès qu'une source publication des
+dates.
+
+**V0.3 est donc terminée à 100 points pour une bourse et 85 atteignables pour un
+programme, faute de source qui publie une langue.** Les deux critères manquants
+sont documentés comme non implémentables, pas comme oubliés.
 
 ## Deux listes de critères, et pourquoi
 
@@ -201,7 +223,11 @@ et de pays, et ne doit pas pour autant remonter dans la liste. Un score n'a de
 sens que rapporté au maximum de son type : 85 sur 100 pour un programme et
 100 sur 100 pour une bourse ne se comparent pas.
 
-État mesuré : **8 retenues sur 49** opportunités, 6 programmes et 2 bourses.
+État mesuré : **9 retenues sur 69** opportunités, 7 programmes et 2 bourses.
+
+Le maximum atteignable d'un programme est 85 sur 100, pas 100 : le critère
+`langue` est écrit et fonctionne, mais aucune source ne renseigne `language`.
+Les 15 points sont donc invaintables, et c'est dit plutôt que masqué.
 
 ## Une limite assumée
 

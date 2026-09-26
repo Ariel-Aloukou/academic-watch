@@ -3,9 +3,9 @@
 Veille académique : recherche de programmes de Master et de financements
 correspondant à un profil, sur des sources officielles.
 
-Le projet en est à la **V0.3** : trois sources sont extraites, la correspondance
+Le projet en est à la **V0.3** : quatre sources sont extraites, la correspondance
 avec le profil classe les opportunités et explique pourquoi. Sur les
-49 opportunités collectées, 8 correspondent au profil. Tout ce qui n'est pas
+69 opportunités collectées, 9 correspondent au profil. Tout ce qui n'est pas
 fait est indiqué comme tel ci-dessous.
 
 ## État réel
@@ -13,12 +13,16 @@ fait est indiqué comme tel ci-dessous.
 | Version | Objet | État |
 | ------- | ----- | ---- |
 | V0.1 | Chargement et affichage du profil | fait |
-| V0.2 | Collecte et extraction des sources | fait, 3 sources, 49 opportunités |
-| V0.3 | Correspondance avec le profil | fait, 8 retenues sur 49, reste la langue |
+| V0.2 | Collecte et extraction des sources | fait, 4 sources, 69 opportunités |
+| V0.3 | Correspondance avec le profil | fait, 9 retenues sur 69 |
 | V0.4 | Sauvegarde des résultats | à faire |
 | V0.5 | Détection des nouveautés | à faire |
 | V0.6 | Notification | à faire |
 | V0.7 | Passage à l'échelle | à faire |
+
+Deux critères de la V0.3 ne sont pas implémentés, et ne le sont pas par oubli :
+aucune source ne publie de date limite ni de langue d'enseignement. C'est
+vérifié page par page, pas supposé. `docs/SOURCES.md` §6.3 donne le détail.
 
 Le programme fonctionne **en ligne uniquement** : il télécharge les pages au
 moment de l'exécution et n'écrit rien. Aucune donnée n'est conservée d'une
@@ -100,13 +104,19 @@ bloquée. Elle n'écrit rien. Le détail des verdicts est dans `docs/SOURCES.md`
 19 sources sont déclarées, réparties en trois catégories : sites officiels
 d'universités, organismes officiels de bourses, portails spécialisés.
 
-Trois sont aujourd'hui exploitées :
+Quatre sont aujourd'hui exploitées :
 
 * **TUM** (Allemagne), 10 programmes ;
 * **KAIST – Explore Programs** (Corée du Sud), 36 programmes ;
-* **KAIST – Scholarship** (Corée du Sud), 3 bourses.
+* **KAIST – Scholarship** (Corée du Sud), 3 bourses ;
+* **EACEA – catalogue Erasmus Mundus** (Union européenne), 20 programmes.
 
-Les 16 autres sont décidées et documentées, mais pas encore lues. La majorité
+Une seule des 20 opportunités EACEA correspond au profil, « Master's Programme
+in Cybersecurity and Assurance », en correspondance directe. Ce catalogue est
+un annuaire large, pas une source de cybersécurité : le résultat est le bon
+résultat, pas une déception.
+
+Les 15 autres sont décidées et documentées, mais pas encore lues. La majorité
 sont des portails de recherche dont les résultats ne sont pas dans le HTML :
 elles ne peuvent pas être extraites avec une simple requête. `docs/SOURCES.md`
 dit lesquelles, et pourquoi.
@@ -121,7 +131,7 @@ dit lesquelles, et pourquoi.
 * **Le profil ne devient pas un miroir des sites.** Les domaines de
   `config/profile.json` restent la définition de l'objectif. Le vocabulaire que
   les universités utilisent pour le désigner est porté par `related_terms`,
-  avec un niveau de proximité explicite. Voir `docs/README.md` §
-  `src/matches.py`.
+  avec un niveau de proximité explicite. Voir `docs/README.md` §6
+  (`src/matches.py`) et `docs/VERSIONS.md` V0.3.
 * **Une source non lisible est signalée, pas contournée.** Voir
   `docs/SOURCES.md` §1.3.
