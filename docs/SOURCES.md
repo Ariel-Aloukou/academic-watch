@@ -346,18 +346,19 @@ rentable du projet.** Les categories 1 et 2 doivent être renforcées en priorit
 | Verdict | Nombre | Sources |
 | ------- | ------ | ------- |
 | `exploitable` | 7 | TUM, NTNU, KAIST – Eligibility, UBC, EduCanada – Bourses, Study in Japan – MEXT, EACEA |
-| `a_tester` | 9 | KAIST – Explore Programs, EduCanada – Programmes, DAAD, Study in Japan x2, Study in Korea x2, Study in Norway, Erasmus Mundus |
+| `a_tester` | 10 | KAIST – Explore Programs, KAIST – Scholarship, EduCanada – Programmes, DAAD, Study in Japan x2, Study in Korea x2, Study in Norway, Erasmus Mundus |
 | `bloque` | 2 | Campus China, Study in China – CSC |
 
 Deux nuances que le tableau ne montre pas :
 
-* **KAIST – Explore Programs est classée `a_tester` alors qu'elle est
-  implémentée et produit 36 opportunités.** Le validateur cherche des tableaux
-  et des liens de fiche ; KAIST présente ses programmes dans un accordéon dont
-  les liens sont des sites de département. C'est pourquoi le tableau le suit
-  d'une mention `[impl.]` : le verdict décrit la page, pas ce que le programme
-  sait faire. Les deux questions sont différentes et ne doivent pas être
-  confondues ;
+* **Trois sources implémentées sont classées `a_tester` alors qu'elles
+  produisent des opportunités.** KAIST – Explore Programs et KAIST –
+  Scholarship le sont pour la même raison : le validateur cherche des tableaux
+  et des liens de fiche, or KAIST présente ses programmes dans un accordéon et
+  ses bourses dans des paragraphes suivis de listes. C'est pourquoi le tableau
+  les suit d'une mention `[impl.]` : le verdict décrit la page, pas ce que le
+  programme sait faire. Les deux questions sont différentes et ne doivent pas
+  être confondues ;
 * **EduCanada – Bourses ressort `exploitable`** grâce à un lien de fiche réel
   (`bcdi2030.aspx`) que l'inspection manuelle avait raté. Les deux pages
   EduCanada ne se valent pas.
@@ -384,6 +385,8 @@ indique ce que chaque source retenue peut réellement fournir.
 | `source` | oui | oui | oui | oui | oui | oui |
 | `deadline` | non | non | non | oui | non | oui |
 | `funding` | non | à vérifier | à extraire | oui | non | oui |
+| `language` | non | oui | oui | oui | à vérifier | oui |
+| `eligibility` | non | oui | oui | oui | non | oui |
 
 Deux corrections apportées après implémentation de KAIST :
 
@@ -392,12 +395,16 @@ Deux corrections apportées après implémentation de KAIST :
   date depuis cette page reviendrait à inventer ;
 * `degree` contient trois valeurs (`Master's`, `Master's-Ph.D. Integrated`,
   `Ph.D.`). Le choix se fera en V0.3, pas au moment de l'extraction.
-| `language` | non | oui | oui | oui | à vérifier | oui |
-| `eligibility` | non | oui | oui | oui | non | oui |
 
-Conséquence pour la V0.3 : le filtrage ne peut pas reposer sur `field` pour TUM
-et UBC. Il devra comparer le titre et la description aux domaines du profil.
-C'est le rôle de `src/filters.py`, qui reste à écrire.
+Ce tableau ne couvre pas la page Scholarship de KAIST, qui n'a pas les mêmes
+champs : elle ne publie ni domaine, ni diplôme, ni date limite, mais elle
+publie `funding` et `eligibility`, que les autres sources donnent plus
+rarement. Le détail est dans §7.
+
+Conséquence pour la V0.3 : la correspondance ne peut pas reposer sur `field`
+pour TUM et UBC. Elle compare le titre, le domaine et la description aux
+domaines du profil. C'est le rôle de `src/matches.py`, écrit, mais qui ne
+retient pour l'instant que trois critères : domaine, diplôme et pays.
 
 ---
 
@@ -409,6 +416,7 @@ Une version doit fonctionner avant la suivante (docs/VERSIONS.md).
 | ----- | ------ | ------ |
 | 1 | TUM | **Faite** en V0.2, sert de référence technique |
 | 2 | KAIST programmes | **Faite** en V0.2, 36 opportunités, correspondance directe au profil |
+| 2 | KAIST bourses | **Faite**, 3 bourses, premier cas de parseur dédié |
 | 3 | NTNU | Correspondance optimale, information d'éligibilité UE/EEE |
 | 4 | EACEA catalogue | Source officielle, bons rendements |
 | 5 | UBC | Le plus gros volume |
@@ -419,10 +427,44 @@ Les deux premières étapes sont terminées sans une seule ligne de code propre 
 un site dans `src/scraper.py` : KAIST n'a demandé qu'un bloc JSON de plus. C'est
 la preuve que l'architecture tient.
 
-Si la structure HTML d'une source s'avère impossible à exprimer en sélecteurs
-CSS, c'est le signal qu'il faut un parseur dédié, et non une approximation
-fragile. Cette décision sera prise à la V0.7. KAIST a déjà rencontré ce cas,
-pour le nom du collège, et n'a pas été contournée.
+## Le cas du parseur dédié
+
+Si la structure HTML d'une source est impossible à exprimer en sélecteurs CSS,
+c'est le signal qu'il faut un parseur dédié, et non une approximation fragile.
+Ce cas s'est présenté, et il n'a pas été contourné.
+
+**La page Scholarship de KAIST** (`KAIST - Scholarship`) écrit chaque bourse
+ainsi :
+
+```text
+<p>KAIST Global Presidential Scholarship (KGPS)</p>
+<ul>
+  <li><span>Departments Accepting Applications:</span><span>...</span></li>
+  <li><span>Admission Periods:</span><span>...</span></li>
+  <li><span>Eligibility Requirements:</span><span>...</span></li>
+  <li><span>Benefits:</span><span>...</span></li>
+</ul>
+```
+
+Le nom et les détails sont deux éléments frères. Aucun sélecteur ne peut les
+apparier. La source déclare donc `"parser": "kaist_scholarship"` dans
+`config/selectors.json`, et `scraper.py` charge `src/parsers/kaist_scholarship.py`
+à la place de la lecture générique. `scraper.py` reste ainsi ignorant du
+contenu de la page.
+
+Deux décisions prises pour ce parseur, à ne pas confondre :
+
+* `funding_type` reçoit le texte `Benefits` **tel qu'il est écrit**, montant
+  compris : « Full tuition coverage and a monthly stipend of 1,000,000 KRW ».
+  `funding_amount` reste `None`. Extraire un nombre d'une phrase demande une
+  recherche de motif dans du texte libre, donc du code fragile ; ce sera
+  discuté séparément ;
+* `deadline` reste `None`. « Admission Periods: Spring/Fall Early/Fall
+  Regular » décrit des cycles, pas une date.
+
+Un cas reste ouvert et assumé : le **collège** de KAIST n'est pas extractible.
+Il est écrit dans un `<h4>` qui est frère du `<ul>` parent, donc hors de portée
+d'un sélecteur. Il n'a pas été deviné.
 
 ---
 
@@ -434,7 +476,7 @@ source dans le cahier des charges avant de savoir la lire.
 | Fichier | Rôle | Contenu |
 | ------- | ---- | ------- |
 | `config/sources.json` | le cahier des charges | `name`, `category`, `country`, `type`, `url`, `enabled` |
-| `config/selectors.json` | la technique d'extraction | `name`, `university`, `base_url`, `selectors` |
+| `config/selectors.json` | la technique d'extraction | `name`, `university`, `base_url`, `selectors`, et `parser` pour les sources qui ne s'expriment pas en sélecteurs |
 
 `src/scraper.py` croise les deux par le champ `name`. Une source n'est scrapée
 que si elle satisfy les deux conditions :

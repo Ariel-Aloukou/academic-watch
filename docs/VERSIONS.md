@@ -77,10 +77,14 @@ indique si elle contient réellement une liste d'opportunités. Les cinq verdict
 sont décrits dans `docs/SOURCES.md` §1.3. Cette vérification conditionne la
 décision d'écrire des sélecteurs pour une source.
 
-État : **TUM et KAIST sont implémentées**, 46 opportunités. KAIST n'a demandé
-qu'un bloc dans `config/selectors.json`, sans une seule ligne ajoutée à
-`src/scraper.py`. C'est la démonstration que le format commun tient dès la
-deuxième source.
+État : **TUM et KAIST – Explore Programs sont implémentées**, 46 opportunités.
+KAIST n'a demandé qu'un bloc dans `config/selectors.json`, sans une seule ligne
+ajoutée à `src/scraper.py`. C'est la démonstration que le format commun tient
+dès la deuxième source.
+
+Une troisième source, KAIST – Scholarship, est venue en V0.3. Elle n'a demandé
+ni sélecteur, ni ligne dans `scraper.py`, mais un parseur dédié : voir
+`docs/SOURCES.md` §7. Le compte est donc de 49 opportunités.
 
 ## Résultat attendu
 
@@ -104,36 +108,50 @@ Exemple :
 
 ---
 
-# V0.3 - Filtrage
+# V0.3 - Correspondance et score
 
 ## Objectif
 
-Comparer les opportunités avec le profil.
+Comparer les opportunités avec le profil, et expliquer pourquoi.
 
 ## À développer
 
-Créer :
+Le module est :
 
 ```text
-src/filters.py
+src/matches.py
 ```
 
-Le filtre doit vérifier notamment :
+Il ne s'appelle pas `filters.py` parce que le travail n'est pas de garder ou
+de supprimer, mais de dire **à quel niveau** une opportunité correspond.
 
-* niveau ;
-* domaine ;
-* pays ;
+Fait :
+
+* trois paliers de correspondance sur le domaine (`direct`, `strong`, `weak`),
+  déclarés dans `config/profile.json` ;
+* score sur 100, budget des points déclaré dans le module ;
+* raisons en toutes lettres, pour que l'étudiant puisse lire pourquoi un
+  programme lui est proposé.
+
+Reste à écrire :
+
 * étudiants internationaux ;
 * financement ;
 * langue ;
 * deadline.
+
+Un cas que le filtrage devra traiter à part : les 3 bourses KAIST sont
+aujourd'hui écartées, faute de domaine. Une bourse n'annonce pas de matière, et
+« est-ce une bourse ? » n'est pas la question que pose un profil de recherche.
+La façon de traiter ce cas n'est pas décidée ; elle ne doit pas être tranchée
+en même temps que le reste.
 
 ## Résultat attendu
 
 Le programme doit séparer :
 
 ```text
-Opportunités compatibles
+Opportunités compatibles, avec leur score et leurs raisons
 ```
 
 et
@@ -141,6 +159,10 @@ et
 ```text
 Opportunités non compatibles
 ```
+
+`matched` est la porte, `score` ne classe que parmi les retenues : un
+programme sans correspondance de domaine peut obtenir des points de diplôme
+et de pays, et ne doit pas pour autant remonter dans la liste.
 
 ---
 
@@ -337,7 +359,7 @@ main.py
        ↓
 scraper.py
        ↓
-filters.py
+matches.py
        ↓
 storage.py
        ↓

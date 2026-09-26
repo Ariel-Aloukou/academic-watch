@@ -119,8 +119,10 @@ academic-watch/
 │
 ├── src/
 │   ├── main.py
+│   ├── models.py
 │   ├── scraper.py
-│   ├── filters.py
+│   ├── parsers/
+│   ├── matches.py
 │   ├── storage.py
 │   └── notifier.py
 │
@@ -169,9 +171,7 @@ Il orchestre les différentes étapes :
 ```text
 collecter
    ↓
-filtrer
-   ↓
-comparer
+évaluer la correspondance avec le profil
    ↓
 enregistrer
    ↓
@@ -204,11 +204,16 @@ Le détail de la méthode et des verdicts est dans `docs/SOURCES.md` §1.
 
 ---
 
-## `src/filters.py`
+## `src/matches.py`
 
-Contient les règles permettant de déterminer si une opportunité correspond au profil.
+Contient les règles permettant de déterminer si une opportunité correspond au
+profil.
 
-Exemples :
+Le module ne fait pas que **garder ou supprimer**. Il répond à trois questions :
+l'opportunité correspond-elle, pourquoi, et à quel niveau. `evaluer()` renvoie
+donc `matched`, `score` et `reasons`.
+
+Critères :
 
 ```text
 Master ?
@@ -218,6 +223,20 @@ Pays compatible ?
 Financement disponible ?
 Date limite intéressante ?
 ```
+
+Sur le domaine, la correspondance se fait en trois paliers, déclarés dans
+`config/profile.json` et non déduits d'une similarité de chaînes :
+
+| Palier | Sens | Points |
+| ------ | ---- | ------ |
+| `direct` | le texte contient un domaine de `fields` | 50 |
+| `strong` | le texte contient un terme de `related_terms.strong` | 30 |
+| `weak` | le texte contient un terme de `related_terms.weak` | 10 |
+
+Cette séparation a une raison : sans elle, ajouter les mots trouvés sur les
+sites au profil ferait du profil un miroir des pages surveillées. `fields` reste
+la définition de l'objectif, `related_terms` porte le vocabulaire que les
+universités utilisent pour le désigner.
 
 ---
 
