@@ -301,6 +301,54 @@ token = "123456789abcdef"
 
 dans le dépôt GitHub.
 
+### Les six secrets de la veille
+
+Voici les six variables que le programme attend, et les valeurs exactes qu'il
+faut mettre. Les noms ne sont pas libres : ce sont ceux que `src/notifier.py`
+lit, et un test les compare avec le workflow. **Les six ensemble, ou pas du
+tout** — il en manque une, le programme reste en console et le dit, ce qui est
+le mode par défaut.
+
+| Nom | Ce qu'on y met, pour une adresse Outlook | Exemple |
+| --- | --------------------------------------- | ------- |
+| `SMTP_HOST` | le serveur d'envoi | `smtp-mail.outlook.com` |
+| `SMTP_PORT` | le port de soumission, **en texte** | `587` |
+| `SMTP_USER` | l'adresse Outlook, en clair | `etudiant@outlook.com` |
+| `SMTP_PASSWORD` | le mot de passe d'application, **pas** celui du compte | 16 caractères |
+| `EMAIL_FROM` | l'adresse qui envoie, la même que `SMTP_USER` | `etudiant@outlook.com` |
+| `EMAIL_TO` | l'adresse qui reçoit, où la vôtre | `etudiant@outlook.com` |
+
+### Où obtenir un mot de passe d'application
+
+C'est le point qui bloque le plus souvent, parce que le mot de passe du compte
+ne fonctionne pas — Microsoft l'a désactivé pour les applications qui ne savent
+pas gérer la double authentification.
+
+1. Sur [account.microsoft.com](https://account.microsoft.com), se connecter
+   avec l'adresse Outlook et activer la double authentification ;
+2. Aller dans **Sécurité > Mot de passe d'application**, en choisir un, le
+   nommer, et le valider par code postal ;
+3. Copier le mot de passe de 16 caractères. C'est le seul mot de passe qui
+   fonctionne, et Microsoft ne l'affiche qu'une seule fois.
+
+Sans double authentification activée, la page des mots de passe d'application
+n'existe pas. Ce n'est pas une panne : c'est la conception de Microsoft.
+
+### Où les entrer dans le dépôt
+
+Dans le dépôt : **Settings > Secrets and variables > Actions > New repository
+secret**, une fois par variable, avec le nom exact du tableau ci-dessus. Six
+secrets, six fois l'opération.
+
+Ces noms de menus sont ceux de l'interface de GitHub, qui est en anglais. Ils
+ne se trouvent pas dans une version française, et c'est le premier endroit où
+l'on peut bloquer un après-midi.
+
+Ils sont passés au programme par `env`, jamais dans la ligne de commande, et le
+workflow fonctionne sans aucun d'eux. Pour vérifier, lancer le workflow
+**manuellement** : le résumé d'étape dit `Notification : email envoyé ...` ou
+nomme le secret qui manque.
+
 ---
 
 # 13. Flux complet

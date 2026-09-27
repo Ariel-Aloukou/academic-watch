@@ -62,7 +62,23 @@ jobs:
       # `python src/main.py | tee` est celui de `tee`, qui est toujours zéro :
       # une veille en échec passerait pour une veille réussie, et l'étape
       # suivante committerait le fichier tel quel.
+      # Les six secrets de la V0.6, lus par `notifier.py` dans
+      # l'environnement. Ils sont passés par `env` et jamais écrits dans la
+      # commande : le masquage de GitHub remplace la valeur quand elle
+      # apparaît telle quelle dans le journal, mais pas une valeur que le shell
+      # reconstitue. Dans `env`, la valeur n'est jamais affichée.
+      #
+      # Un secret absent ou vide donne une chaîne vide, donc le programme reste
+      # en console et le dit. C'est le mode par défaut : le workflow fonctionne
+      # sans qu'aucun secret ne soit créé.
       - name: Lancer la veille
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: |
           set -o pipefail
           python src/main.py | tee journal.txt
@@ -118,7 +134,11 @@ jobs:
           {
             echo "## Academic Watch"
             echo
-            grep -aE 'correspondent au profil|nouvelles depuis|dans data/|Rien de nouveau' journal.txt \
+            # Le motif `Notification` est ici et pas dans le message de commit :
+            # c'est la seule trace qu'un envoi a été tenté, et réussi ou non.
+            # Un secret absent s'y lit aussi, donc une configuration incomplète se
+            # voit sans avoir à ouvrir le journal.
+            grep -aE 'correspondent au profil|nouvelles depuis|dans data/|Rien de nouveau|Notification' journal.txt \
               || echo "La veille n'a rien produit."
             echo
             # La section « À signaler » est recopiée entière. C'est elle qui

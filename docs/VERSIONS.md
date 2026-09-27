@@ -623,6 +623,235 @@ Financement
 Lien
 ```
 
+## La décision : le canal
+
+Trois réponses étaient possibles, et la question a été posée plutôt que
+décidée dans le code.
+
+**Console seule**, ce que le cahier annonce en premier. C'est déjà fait : la
+V0.5 affiche le signal et le résumé d'étape du workflow le recopie dans le
+navigateur. Écrire `notifier.py` dans ce mode serait déplacer les `print` de
+`main.py` vers un module vide.
+
+**Un message externe, Telegram en tête.** Le cahier le cite en premier exemple.
+
+**Un message externe par email.** C'est celui-ci qui est retenu, parce que c'est
+le seul que la boîte aux lettres de l'étudiant ouvre déjà. Le résumé d'étape
+suppose d'ouvrir un navigateur ; un email arrive tout seul, et il peut être lu
+sans connexion.
+
+Le port de soumission 587 est ouvert sur les runners GitHub, le 25 est le seul
+bloqué, donc l'envoi fonctionne depuis l'exécution automatique. `smtplib` est
+dans la bibliothèque standard : **aucun paquet ajouté**, `requirements.txt` ne
+change pas.
+
+L'email part **une fois par exécution, donc une fois par jour**, y compris les
+jours où il n'y a rien de nouveau. La décision a été posée, et elle a un
+coût : 365 messages par an. Son avantage est qu'un jour sans message se voit,
+alors qu'un secret périmé est indiscernable d'une veille sans nouveauté.
+
+## Un seul rendu, deux moyens
+
+La décision de code la plus importante de la version : **le texte est produit
+une fois**. `notifier.rendre()` rend le bulletin, la console l'affiche et
+l'email l'envoie. Deux rendus de la même liste divergeraient au premier champ
+ajouté, et la divergence se verrait dans la boîte de réception bien avant
+d'être cherchée.
+
+Le module est donc coupé en trois, et chaque morceau se teste seul :
+
+| Fonction | Fait | Se teste par |
+| -------- | ---- | ------------- |
+| `rendre` | le texte | comparaison de chaînes, sans rien d'autre |
+| `message` | les en-têtes et le corps | un dictionnaire de valeurs, sans réseau |
+| `envoyer` | le transport | un objet passé en argument, qui note les appels |
+
+Le découpage n'est pas une élégance. Les en-têtes sont là où vivent les erreurs
+réelles : les accents, l'adresse, l'objet. Aucun test de cette partie n'a besoin
+d'un serveur, donc aucun ne peut échouer pour une raison qui n'a rien à voir
+avec le code. Le transport fait cinq lignes, et on le vérifie en passant un
+autre objet en argument.
+
+Le transport est un paramètre, `transport=smtplib.SMTP`, et non un remplacement
+de `smtplib.SMTP` pendant les tests. La différence n'est pas de principe : un
+`monkeypatch.setattr(notifier.smtplib, "SMTP", ...)` modifie le module de la
+bibliothèque standard pour toute la session, et un test qui n'a rien à voir avec
+la messagerie en hérite. Un paramètre se voit dans la signature, et le
+programme se comporte normalement sans qu'on en parle.
+
+## Ce que le message peut contenir, mesuré
+
+Le cahier demande six champs. Comptés sur les 69 fiches de `data/` :
+
+| Champ du cahier | Champ de la fiche | Publié |
+| --------------- | ----------------- | ------ |
+| titre | `title` | 69 / 69 |
+| université | `university` | 69 / 69 |
+| pays | `country` | 69 / 69 |
+| deadline | `deadline` | **0 / 69** |
+| financement | `funding_type` | 3 / 69, dont 2 des 9 retenues |
+| lien | `url` | 69 / 69 |
+
+Le message affiche donc cinq champs sur six, dont un pour deux opportunités sur
+neuf. La ligne `Deadline` existe dans le rendu et n'est écrite que si la fiche
+en porte une : aucune des quatre sources n'en publie, c'est mesuré page par page
+et écrit dans `docs/SOURCES.md` §6.3.
+
+Un champ absent n'est pas remplacé par un tiret, et il n'est pas remplacé par
+`None`. Une ligne « Financement : — » ferait croire que la bourse ne finance
+rien, ce qui est différent de ne pas le publier.
+
+## L'ordre : notifier avant de mémoriser
+
+`publier` est appelé **avant** `conserver_vus`. L'ordre inverse est plus
+naturel — on enregistre ce qui a été montré, donc après l'avoir montré — et il
+perdu l'information :
+
+* avec l'ordre retenu, un run qui s'arrête entre les deux renvoie la même
+  annonce au run suivant. Le doublon se voit et se corrige ;
+* avec l'ordre inverse, l'opportunité est déjà marquée comme vue, personne ne
+  l'a lue, et `seen.json` affirme le contraire. La perte ne se voit pas.
+
+Le test qui verrouille cet ordre est dans `tests/test_main.py`. Il ne teste rien
+de visible : deux étapes peuvent s'échanger en laissant un journal identique.
+
+## L'échec d'envoi n'arrête pas la veille
+
+Si l'envoi échoue, `publier` écrit une ligne et rend la main. Il ne lève pas
+d'exception, et la raison est concrète : dans le workflow, une veille en échec
+fait sauter l'étape qui commite `data/`. Une veille qui a réussi et un email
+qui n'est pas parti ne doivent pas coûter la journée de données.
+
+Le prix de ce choix est qu'un échec pourrait se perdre. Il est visible deux
+fois : la ligne de statut nomme le type de l'erreur, et le workflow la recopie
+dans le résumé d'étape.
+
+## État mesuré
+
+| Situation | Sortie |
+| --------- | ------ |
+| aucun secret défini | `Notification : console seule, il manque SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO` |
+| envoi vers un port fermé | `Notification : email non envoyé (ConnectionRefusedError), la veille est complète` |
+| 9 retenues à signaler | objet `Academic Watch 2026-09-27 : 9 nouvelles` |
+| jour sans nouveauté | objet `Academic Watch 2026-09-27 : rien de nouveau` |
+
+Les deux premiers cas ont été obtenus sur une collecte réelle de 69 fiches, avec
+le code de retour 0, `stderr` vide et la section « Sauvegarde » présente. Dans
+les deux, les empreintes de `data/` sont restées identiques à la référence
+(`2fe23d52d0aa5b3a` et `79d5942237ecabe6`) : la notification n'écrit rien.
+
+Les 308 tests passent en trois secondes, sans réseau. Ils étaient 253. Le
+décompte par fichier : `test_notifier.py` 31, nouveau ; `test_main.py` 8, qui
+étaient 10 et testaient l'affichage, désormais rendu ailleurs ; `test_workflow.py`
+22, qui étaient 17 ; `test_proprete.py` 149, qui étaient 128.
+
+« Sans réseau » n'était qu'une promesse jusqu'ici, tenue par la relecture. Cette
+version ajoute un envoi d'email, donc un chemin par lequel un test pouvait se
+retrouver à appeler le serveur d'Outlook : la couture existe, mais une couture
+cassée est un test qui attend trente secondes avant de dire quelque chose de
+faux. Une fixture automatique de `conftest.py` bouche maintenant les trois
+sorties — `getaddrinfo`, `create_connection` et `connect` — et un test vérifie
+qu'elles sont bouchées, parce qu'un garde-fou qu'on ne vérifie pas peut être
+faux sans que personne le sache.
+
+Le garde-fou a été éprouvé par mutation, pas seulement lu : la couture a été
+cassée volontairement, une seule ligne, et les quatre tests d'envoi ont échoué
+en 1,2 seconde, avec le message du garde-fou, sans `gaierror` et sans délai.
+C'est le seul moyen de savoir qu'un garde-fou fonctionne.
+
+## Défauts trouvés en construisant et en relisant la version
+
+**« 1 mise » au lieu de « 1 mise à jour ».** Le compte appelait
+`_compte(1, "mise", "mises à jour")` : le singulier passait par « mise » et le
+pluriel par « mises à jour », alors que les deux formes s'accordent sur « mise »
+et ne diffèrent qu'en « s ». Le pluriel était juste parce qu'il y en avait deux.
+Le test qui l'a trouvé est le test au singulier, ajouté après. Il n'existait pas
+avant le bug : le pluriel passait, donc le fichier était vert.
+
+**Deux `def main()` dans le même fichier.** Un remplacement de bloc s'est arrêté
+à la première occurrence de `def main():` et a laissé l'ancien `main()` sous le
+nouveau, encore appelant deux fonctions supprimées. Python prend la seconde
+définition sans un mot, le fichier est valide, et l'erreur n'apparaît qu'à
+l'exécution sous la forme d'un `NameError` sur une fonction qui a bien été
+supprimée. Un test dédié vérifie désormais qu'aucune fonction n'est définie deux
+fois dans un même fichier. Il a été vérifié en réintroduisant le doublon : le
+test échoue bien, en nommant `{'main': [63, 138]}`.
+
+**Un test qui atteignait les imports du module testé.** La date fixe du test
+écrivait `notifier.datetime(...)` et `notifier.timezone.utc` : le test passait
+par ce que le module avait importé plutôt que par ce qu'il exposait. Le
+fonctionnement était correct, mais la règle écrite à trois lignes plus haut
+n'était pas vraie. Corrigé en important les deux classes depuis la bibliothèque
+standard.
+
+**Le test qui atteignait la bibliothèque standard.** Pour le faux serveur SMTP,
+le test faisait `monkeypatch.setattr(notifier.smtplib, "SMTP", FauxSMTP)`, ce qui
+modifie le module `smtplib` lui-même pour toute la session, y compris pour les
+tests qui n'ont rien à voir avec la messagerie. C'est ce défaut, et non une
+impression, qui a fait ajouter le paramètre `transport` décrit plus haut.
+
+**Un test perdu sans que rien ne le dise.** Une correction d'accent a été écrite
+dans un script passé en ligne de commande, où les index de liste sont décalés d'un
+par rapport aux numéros de ligne. La ligne `def` d'un test a donc été écrasée par
+le commentaire de la ligne du dessous, et `test_le_run_a_le_droit_d_ecrire` a
+disparu de la collecte. Le fichier restait du Python valide, les 307 tests
+passaient, et aucun avertissement n'était émis : une suite peut perdre une
+protection sans que rien ne le signale. Le compte par fichier l'a montré, parce
+que 21 tests dans un fichier qui en avait 22 ne voulait rien dire de spécial. Un
+test perdu ne se voit que si on compte.
+
+**Un scan qui rendait zéro sans rien lire.** Le scan de contamination lisait chaque
+section de documentation entre son titre et le `---` suivant. Le `---` était
+cherché depuis le début du fichier, donc il attrapait un séparateur situé bien plus
+haut : les deux sections de documentation mesuraient zéro caractère, et le scan
+annonçait « 0 signalement » sur du texte qu'il n'avait pas lu. Le résultat était
+indiscernable d'un fichier propre. Depuis, la fin se cherche après le début, et un
+script vérifie qu'une section fait bien plus de 200 caractères : une section vide
+est un défaut de repérage, pas une propreté.
+
+## Écarts avec le cahier des charges
+
+Le titre du cahier est « Nouvelle opportunité ». La section s'appelle
+« À signaler », comme en V0.5, pour la même raison : une mise à jour n'est pas
+une nouvelle opportunité.
+
+Le cahier annonce Telegram en premier exemple. C'est l'email, parce que c'est
+le canal que l'étudiant a. Rien n'empêche d'ajouter Telegram plus tard : il
+suffirait d'une fonction de plus dans `notifier.py`, qui prendrait le même
+bulletin. C'est pour cela que le module ne fait pas de SMTP directement dans
+`publier`.
+
+Le cahier ne dit rien du rythme. Un message quotidien a été choisi, et le
+pied de message du bulletin le dit à l'étudiant, pour qu'un jour sans
+nouveauté ne soit pas pris pour un message en retard.
+
+## Limites assumées
+
+* **L'envoi réel n'a pas été vérifié.** Aucun test ne parle à un serveur de
+  messagerie, par règle du projet, et les six secrets n'existent pas encore. Le
+  code a été vérifié avec un faux transport, et l'échec avec un vrai serveur qui
+  refuse la connexion. C'est la deuxième chose non vérifiable en local, après le
+  workflow lui-même, et elle se vérifie une fois, à la main.
+* **Un run manuel envoie aussi le message.** Le message part au premier run qui
+  voit la nouveauté, quel qu'il soit. Un `python src/main.py` le jour où le run
+  automatique a déjà envoyé produit donc un second message le même jour. C'est
+  le prix du choix « celui qui voit, annonce », et c'est utile pour essayer le
+  chemin d'envoi.
+* **Le port 465 n'est pas traité.** Le rendu ne gère que le port de soumission
+  587 avec STARTTLS explicite. Le port implicite 465 n'est pas traité, et
+  `starttls` échouerait avec une erreur SMTP peu parlante. Ce port est en clair
+  dans la documentation du fournisseur.
+* **Aucun mot de passe n'est écrit dans le dépôt.** Les six variables sont lues
+  dans l'environnement, et le workflow les passe par `env` et jamais dans la ligne
+  de commande. Un test vérifie que les six noms du code sont exactement les six
+  noms du workflow : une variable renommée d'un côté et pas de l'autre
+  produirait un email qui ne part jamais, sans erreur.
+* **La V1.2 ne découle pas de cette version.** Une deadline qui approche ne
+  change pas la fiche, donc rien ne se déclenche : notifier sur changement ne
+  permet pas de suivre les dates. La V1.2 aura besoin d'une comparaison de
+  dates, pas d'une détection de modification. C'est écrit ici parce qu'il vaut
+  mieux le savoir avant la V1.2 qu'après.
+
 ---
 
 # V0.7 - Plusieurs sources

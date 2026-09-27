@@ -77,8 +77,8 @@ academic-watch/
 │   │   └── kaist_scholarship.py  # Parseur dédié, structure non exprimable en CSS
 │   ├── matches.py          # Correspondance avec le profil, score, raisons
 │   ├── storage.py          # Historique JSON et détection des doublons
-│   └── notifier.py         # Vide - V0.6
-├── tests/                  # 253 tests, lancés par pytest
+│   └── notifier.py         # Bulletin : rendu une fois, console + email
+├── tests/                  # 308 tests, lancés par pytest
 ├── pytest.ini
 ├── requirements.txt
 ├── requirements-dev.txt

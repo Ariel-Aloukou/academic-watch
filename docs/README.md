@@ -404,6 +404,51 @@ Au début, le programme peut simplement afficher les résultats.
 
 Une notification Telegram ou email pourra être ajoutée ensuite.
 
+### Ce que la V0.6 a décidé
+
+**Email, et un message par jour.** Telegram était cité en premier exemple, et
+c'est l'email qui est retenu, parce que c'est le seul canal que la boîte aux
+lettres de l'étudiant ouvre déjà. Le résumé d'étape du workflow suppose
+d'ouvrir un navigateur ; un email arrive tout seul, et se lit sans connexion.
+Un message quotidien, y compris les jours sans nouveauté, afin qu'une absence
+de message se voie : un secret périmé est indiscernable d'une veille sans
+nouveauté.
+
+**Un seul rendu, deux moyens.** `rendre()` produit le texte une fois, la
+console l'affiche et l'email l'envoie. Deux rendus de la même liste
+divergeraient au premier champ ajouté, et la divergence se verrait dans la
+boîte de réception avant d'être cherchée. Le module est donc coupé en trois
+morceaux, chacun testable seul :
+
+| Fonction | Fait | Se teste par |
+| -------- | ---- | ------------- |
+| `rendre` | le texte | une comparaison de chaînes |
+| `message` | les en-têtes et le corps | un dictionnaire de valeurs, sans réseau |
+| `envoyer` | le transport | un objet passé en argument, qui note les appels |
+
+Le découpage n'est pas une élégance : les en-têtes sont là où vivent les
+erreurs réelles, les accents et l'adresse, et aucun test de cette partie n'a
+besoin d'un serveur.
+
+**Publier avant de mémoriser.** L'ordre inverse est plus naturel — on enregistre
+ce qui a été montré, donc après — et il perd l'information : une opportunité
+déjà marquée comme vue sans avoir été lue ne sera plus jamais annoncée, et
+`seen.json` affirmera le contraire. Un doublon se voit ; une perte, non.
+
+**Un envoi qui échoue n'arrête pas la veille.** `publier` ne lève jamais
+d'exception : dans le workflow, une exception ferait sauter l'étape qui commite
+`data/`, et une veille réussie avec un email non parti coûterait la journée de
+données. Le prix est qu'un échec pourrait se perdre ; il est visible deux fois,
+dans la ligne de statut et dans le résumé d'étape.
+
+**Ce que le message peut afficher, mesuré sur les 69 fiches.** Titre, université,
+pays et lien sont publiés 69 fois sur 69. Le financement 3 fois sur 69, dont 2
+des 9 retenues. La date limite **0 fois sur 69** : aucune des quatre sources ne
+la publie, c'est mesuré page par page et écrit dans `docs/SOURCES.md` §6.3. Un
+champ absent n'est ni remplacé par un tiret ni par `None` : « Financement : — »
+ferait croire que la bourse ne finance rien, ce qui n'est pas la même chose que
+ne pas le publier.
+
 ---
 
 # 7. Données minimales d'une opportunité
