@@ -37,6 +37,14 @@ Windows écrit par défaut en cp1252. Un accent devient alors illisible, et le
 fichier est du Python invalide au premier lancement. Le test lit chaque fichier
 en UTF-8 strict : c'est le seul moyen de le savoir avant de l'exécuter.
 
+## Une définition en doublon, le seul défaut que Python accepte
+
+Un fichier peut définir deux fois la même fonction : Python prend la seconde,
+sans un mot. Aucun test de syntaxe ne le voit, et l'erreur n'apparaît qu'à
+l'exécution, sous la forme d'un `NameError` sur une fonction qui, elle, a bien
+été supprimée. Un test dédié le vérifie, parce que c'est arrivé pendant la
+construction de la V0.6.
+
 ## Pourquoi il n'y a pas de test de longueur de ligne
 
 Un test de propreté qui échoue oblige à reformater des fichiers qu'on n'a pas
@@ -49,6 +57,7 @@ prétexte.
 """
 
 import re
+import socket
 from pathlib import Path
 
 import pytest
@@ -161,3 +170,61 @@ def test_pas_de_ligne_vide_en_fin_de_fichier(fichier_avec_donnees):
     # chaque diff du fichier.
     contenu = fichier_avec_donnees.read_text(encoding="utf-8")
     assert not contenu.endswith("\n\n")
+
+
+# Une définition en doublon, qui est le seul défaut de syntaxe que Python accepte
+
+
+@pytest.fixture(
+    scope="module",
+    params=[f.relative_to(RACINE).as_posix() for f in reperes(("src", "tests")) if f.suffix == ".py"],
+)
+def module_python(request):
+    """Un fichier Python du programme, un par exécution du test."""
+    return RACINE / request.param
+
+
+def test_une_fonction_n_est_pas_definie_deux_fois(module_python):
+    # Un doublon est le seul défaut que Python ne signale pas : le fichier est
+    # valide, la dernière définition écrase la première, et rien ne dit qu'il y
+    # en avait deux. L'erreur n'apparaît qu'à l'exécution, sous la forme d'un
+    # `NameError` sur une fonction qui a bien été supprimée.
+    #
+    # C'est arrivé pendant la V0.6 : un remplacement de bloc s'était arrêté à la
+    # première occurrence de `def main():`, et avait donc laissé l'ancien
+    # `main()` sous le nouveau, encore appelant deux fonctions supprimées.
+    # Quelque chose manquait à l'écran, et le fichier ne le disait pas.
+    #
+    # Seules les définitions de premier niveau comptent : une méthode de classe
+    # est indentée, donc hors du motif. C'est volontaire, un `def` indenté dans
+    # une classe ou une fonction n'est pas un doublon de portée.
+    contenu = module_python.read_text(encoding="utf-8")
+    vues = {}
+    for numero, ligne in enumerate(contenu.split("\n"), start=1):
+        trouve = re.match(r"def ([A-Za-z_]\w*)\(", ligne)
+        if trouve:
+            vues.setdefault(trouve.group(1), []).append(numero)
+    doublons = {nom: numeros for nom, numeros in vues.items() if len(numeros) > 1}
+    assert not doublons, f"fonction(s) définie(s) deux fois : {doublons}"
+
+
+# Le garde-fou qui empêche un test de joindre un serveur
+
+
+def test_le_garde_fou_du_reseau_bloque_les_trois_chemins():
+    # La règle « aucun test ne touche au réseau » ne tient qu'à une fixture de
+    # `conftest.py`. Une règle qu'on ne vérifie pas peut être fausse sans que
+    # personne ne le sache, donc ce test tente les trois sorties et vérifie
+    # qu'elles sont refusées. Il est lui-même soumis au garde-fou : il ne peut
+    # donc constater qu'il fonctionne qu'en observant l'échec.
+    #
+    # Les trois chemins sont essayés parce qu'un seul bouché laisserait passer
+    # les deux autres. `smtplib` passe par `create_connection`, un appel HTTP par
+    # `connect`, et la résolution du nom par `getaddrinfo`.
+    for nom, appel in (
+        ("getaddrinfo", lambda: socket.getaddrinfo("smtp.office365.com", 587)),
+        ("create_connection", lambda: socket.create_connection(("smtp.office365.com", 587))),
+        ("connect", lambda: socket.socket().connect(("smtp.office365.com", 587))),
+    ):
+        with pytest.raises(AssertionError, match="ne doit pas joindre un serveur"):
+            appel()
