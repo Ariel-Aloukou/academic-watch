@@ -16,10 +16,15 @@ ferait pas.
 ## Ce qui sert d'identité à une opportunité
 
 C'est la seule vraie décision de ce module. Le choix est `source` + titre
-normalisé, et non l'URL, pour une raison d'asymétrie des erreurs :
+normalisé + diplôme normalisé, et non l'URL, pour une raison d'asymétrie des
+erreurs :
 
-* les deux sont publiés par les 69 opportunités des 4 sources actives, mesuré
-  au chapitre 6.1 de docs/SOURCES.md. Aucun des deux ne manque ;
+* la source et le titre sont publiés par les 69 opportunités des 4 sources
+  actives, mesuré au chapitre 6.1 de docs/SOURCES.md. Aucun des deux ne
+  manque ;
+* le diplôme est publié par 2 sources sur 4, et par aucune des 20 fiches
+  d'EACEA. C'est lui qui distingue les deux programmes de TUM nommés tous
+  deux « Aerospace », mesuré à la V0.4 ;
 * l'URL est la propriété du site, pas de l'opportunité. Les 20 URL d'EACEA
   pointent vers des sites de programmes tiers, et un site qui réorganise ses
   chemins changerait l'URL sans que l'opportunité change. Si l'identité était
@@ -39,6 +44,7 @@ import json
 import unicodedata
 from dataclasses import asdict
 from pathlib import Path
+from typing import NamedTuple
 
 # Chemins calculés depuis ce fichier, comme dans main.py, pour que le programme
 # fonctionne quel que soit le dossier depuis lequel il est lancé.
@@ -192,6 +198,20 @@ def a_change(ancien, nouveau):
     }
 
 
+class Bilan(NamedTuple):
+    """Ce qu'une collecte a apporté de neuf, et ce qu'elle a modifié.
+
+    Deux listes, et non une : une opportunité qui n'avait jamais été
+    collectée et une opportunité dont la page a changé ne se signalent pas de
+    la même façon. Les confondre ferait annoncer une mise à jour sur une
+    opportunité que personne n'a jamais vue. `nouvelles_depuis` et
+    `modifiees_depuis` en font deux listes séparées pour l'affichage.
+    """
+
+    nouvelles: list
+    modifiees: list
+
+
 def sauvegarder(opportunities):
     """Ajoute les opportunités collectées à l'historique, et le renvoie.
 
@@ -200,12 +220,14 @@ def sauvegarder(opportunities):
     apparition, qui est ce qui permet de dire ensuite « cela fait trois mois
     que cette offre est là ».
 
-    Renvoie la liste des identités qui n'étaient pas dans l'historique. C'est la
-    seule information nouvelle de cette version, et elle ne sera exploitée
-    qu'en V0.5.
+    Renvoie un `Bilan` : les identités qui n'étaient pas dans l'historique, et
+    celles dont la fiche a changé. C'est V0.5 qui s'en sert, et le calcul était
+    déjà fait ici : le lire ailleurs obligerait à relire le fichier et à
+    dupliquer `a_change`, donc à avoir deux règles qui divergent en silence.
     """
     connues = {r["identite"]: r for r in lire(OPPORTUNITES)}
     nouvelles = []
+    modifiees = []
 
     for opportunity in opportunities:
         cle = identite(opportunity)
@@ -230,11 +252,20 @@ def sauvegarder(opportunities):
         # quoi qu'il arrive. Le coût est une information en moins : la date de
         # dernière collecte, qui ne sert à rien tant qu'aucun code ne cherche à
         # savoir si une offre a disparu de sa page.
+        #
+        # La même comparaison sert à la V0.5, qui doit signaler les fiches
+        # modifiées. Elle n'est faite qu'une fois, ici : la refaire ailleurs
+        # obligerait à relire le fichier, et deux règles qui divergent en
+        # silence ne se verraient qu'à la première annonce fausse. Comme
+        # `a_change` ignore les horodatages, une bourse qui publie une date ou
+        # un montant plus tard se re-signale, et une collecte identique ne
+        # signale rien.
         if a_change(ancien, enregistrement):
             connues[cle] = enregistrement
+            modifiees.append(cle)
 
     ecrire(OPPORTUNITES, list(connues.values()))
-    return nouvelles
+    return Bilan(nouvelles, modifiees)
 
 
 def nouvelles_depuis(opportunities, deja_vus):
@@ -246,6 +277,38 @@ def nouvelles_depuis(opportunities, deja_vus):
     choisisse quoi afficher, sans que les deux aient chacun la même liste.
     """
     return [o for o in opportunities if identite(o) not in deja_vus]
+
+
+def modifiees_depuis(opportunities, deja_vus, modifiees):
+    """Les opportunités déjà montrées dont la fiche a changé.
+
+    Le troisième argument est la liste renvoyée par `sauvegarder` : les
+    identités dont la fiche diffère de ce qui était enregistré. C'est un
+    calcul fait au moment de la sauvegarde, parce que c'est là que la version
+    précédente de la fiche existe encore.
+
+    Les deux conditions sont nécessaires, et chacune écarte un cas qui
+    produirait un mensonge à l'écran :
+
+* `deja_vus` exclut ce qui n'a jamais été montré. Une opportunité collectée
+  la veille mais écartée par le profil, et dont la page change aujourd'hui,
+  n'a pas été mise à jour pour l'étudiant : elle lui est inconnue. Elle
+  passe par `nouvelles_depuis`, qui la présente comme nouvelle ;
+* l'identité doit être dans `modifiees`, sinon une collecte identique se
+  signalerait comme une mise à jour tous les jours.
+
+    Une conséquence à connaître : changer `config/profile.json` change le
+    score, qui fait partie de la fiche. Les opportunités retenues dont le
+    score bouge seront donc signalées comme mises à jour. C'est le
+    comportement voulu : le profil ayant changé, l'information affichée
+    n'est plus la même.
+    """
+    modifiees = set(modifiees)
+    return [
+        o
+        for o in opportunities
+        if identite(o) in deja_vus and identite(o) in modifiees
+    ]
 
 
 # 4. Ce qui a déjà été montré

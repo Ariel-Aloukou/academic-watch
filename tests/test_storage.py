@@ -88,21 +88,24 @@ def historique(sandbox):
 
 
 def test_premiere_ecriture_signale_tout_comme_nouveau(historique):
-    assert len(storage.sauvegarder([opportunite("Master A"), opportunite("Master B")])) == 2
+    bilan = storage.sauvegarder([opportunite("Master A"), opportunite("Master B")])
+    assert len(bilan.nouvelles) == 2
+    assert bilan.modifiees == []
     assert len(storage.lire(historique)) == 2
 
 
 def test_la_meme_collecte_ne_signale_rien_de_nouveau(historique):
     lot = [opportunite("Master A"), opportunite("Master B")]
     storage.sauvegarder(lot)
-    assert storage.sauvegarder(lot) == []
+    assert storage.sauvegarder(lot).nouvelles == []
+    assert storage.sauvegarder(lot).modifiees == []
     assert len(storage.lire(historique)) == 2
 
 
 def test_une_seule_opportunite_neuve_se_fond_dans_l_historique(historique):
     storage.sauvegarder([opportunite("Master A"), opportunite("Master B")])
-    nouvelles = storage.sauvegarder([opportunite("Master A"), opportunite("Master B"), opportunite("Master C")])
-    assert len(nouvelles) == 1
+    bilan = storage.sauvegarder([opportunite("Master A"), opportunite("Master B"), opportunite("Master C")])
+    assert len(bilan.nouvelles) == 1
     assert len(storage.lire(historique)) == 3
 
 
@@ -120,7 +123,10 @@ def test_la_premiere_apparition_survit_a_une_collecte_ulterieure(historique):
 
 def test_les_donnees_se_rafraichissent(historique):
     storage.sauvegarder([opportunite("Master A", url="https://exemple/avant")])
-    storage.sauvegarder([opportunite("Master A", url="https://exemple/apres")])
+    bilan = storage.sauvegarder([opportunite("Master A", url="https://exemple/apres")])
+    # C'est ce changement que la V0.5 signale comme mise a jour.
+    assert bilan.nouvelles == []
+    assert len(bilan.modifiees) == 1
     fiches = storage.lire(historique)
     assert len(fiches) == 1
     assert fiches[0]["url"] == "https://exemple/apres"
@@ -131,8 +137,8 @@ def test_un_diplome_reecrit_cree_une_identite(historique):
     # en une seule chaine. Si l'ordre change, l'identite change. Ce test verrouille
     # le comportement pour qu'on ne le decouvre pas par surprise.
     storage.sauvegarder([opportunite("Master A", diplome="Master's")])
-    nouvelles = storage.sauvegarder([opportunite("Master A", diplome="Master's (reformule)")])
-    assert len(nouvelles) == 1
+    bilan = storage.sauvegarder([opportunite("Master A", diplome="Master's (reformule)")])
+    assert len(bilan.nouvelles) == 1
     assert len(storage.lire(historique)) == 2
 
 
@@ -186,6 +192,57 @@ def test_rien_de_neuf_quand_rien_ne_change(historique):
     assert storage.nouvelles_depuis([opportunite("Master A")], vus) == []
 
 
+# Une mise a jour n'est signalee que si l'etudiant a deja vu l'opportunite.
+# Les deux tests qui suivent sont le sens de cette fonction, et ils ne
+#eraient pas la meme chose.
+
+
+def test_une_fiche_modifiee_et_deja_montree_est_signalee(historique):
+    # Il faut la version d'avant dans l'historique : sans elle, la fiche est
+    # neuve et il n'y a rien de modifié.
+    storage.sauvegarder([opportunite("Master A", url="https://exemple/avant")])
+    vus = storage.conserver_vus([opportunite("Master A")])
+    bilan = storage.sauvegarder([opportunite("Master A", url="https://exemple/apres")])
+    signalees = storage.modifiees_depuis(
+        [opportunite("Master A", url="https://exemple/apres")], vus, bilan.modifiees
+    )
+    assert [o.url for o in signalees] == ["https://exemple/apres"]
+
+
+def test_une_fiche_modifiee_et_jamais_montree_est_nouvelle(historique):
+    # Le mensonge a eviter : « mise a jour » sur une opportunite que personne
+    # n'a jamais vue. Elle n'est pas dans les vues, donc elle est nouvelle.
+    bilan = storage.sauvegarder([opportunite("Master A", url="https://exemple/apres")])
+    vues = set()
+    assert storage.modifiees_depuis(
+        [opportunite("Master A", url="https://exemple/apres")], vues, bilan.modifiees
+    ) == []
+    assert len(storage.nouvelles_depuis([opportunite("Master A")], vues)) == 1
+
+
+def test_une_collecte_identique_ne_signale_aucune_mise_a_jour(historique):
+    vus = storage.conserver_vus([opportunite("Master A")])
+    bilan = storage.sauvegarder([opportunite("Master A", recoltee="2026-10-05T08:00:00+00:00")])
+    assert bilan.modifiees == []
+    assert storage.modifiees_depuis([opportunite("Master A")], vus, bilan.modifiees) == []
+
+
+def test_les_deux_listes_ne_se_recouvrent_pas(historique):
+    # Une seule occasion de le verifier : la meme opportunite ne peut pas etre
+    # a la fois nouvelle et mise a jour, sinon elle est comptee deux fois.
+    storage.sauvegarder([opportunite("Master A", url="https://exemple/avant")])
+    vus = storage.conserver_vus([opportunite("Master A")])
+    opportunities = [opportunite("Master A", url="https://exemple/apres"), opportunite("Master Z")]
+    bilan = storage.sauvegarder(opportunities)
+    nouvelles = {storage.identite(o) for o in storage.nouvelles_depuis(opportunities, vus)}
+    modifiees = {
+        storage.identite(o) for o in storage.modifiees_depuis(opportunities, vus, bilan.modifiees)
+    }
+    assert len(nouvelles) == 1
+    assert len(modifiees) == 1
+    assert nouvelles & modifiees == set()
+
+
 # 5. Les refus délibérés
 #
 # Un fichier illisible arrête le programme. Repartir d'un historique vide ne se
@@ -226,7 +283,7 @@ def test_un_seen_au_mauvais_format_est_refuse_pas_ignore(historique):
 
 def test_un_fichier_absent_n_est_pas_une_erreur(historique):
     assert storage.lire(historique) == []
-    assert len(storage.sauvegarder([opportunite("Master A")])) == 1
+    assert len(storage.sauvegarder([opportunite("Master A")]).nouvelles) == 1
 
 
 def test_le_dossier_est_cree_s_il_n_existe_pas(sandbox):

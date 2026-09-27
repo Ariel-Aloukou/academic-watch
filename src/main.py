@@ -6,7 +6,7 @@ Orchestration (docs/VERSIONS.md) :
     V0.2  collecte des sources             -> collect_opportunities()
     V0.3  correspondance avec le profil    -> matches.py   (evaluer)
     V0.4  sauvegarde                       -> storage.py   (sauvegarder)
-    V0.5  détection des nouveautés         -> storage.py   (pas encore fait)
+    V0.5  détection des nouveautés         -> storage.py, main.py
     V0.6  notification                    -> notifier.py  (pas encore fait)
 
 Le programme doit rester simple : main.py ne fait qu'appeler les autres
@@ -18,7 +18,14 @@ from pathlib import Path
 
 from matches import evaluer
 from scraper import collect_opportunities
-from storage import conserver_vus, sauvegarder
+from storage import (
+    charger_vus,
+    conserver_vus,
+    identite,
+    modifiees_depuis,
+    nouvelles_depuis,
+    sauvegarder,
+)
 
 # Chemin calculé depuis ce fichier pour fonctionner quel que soit le dossier
 # depuis lequel le programme est lancé (localement ou via GitHub Actions).
@@ -52,25 +59,69 @@ def display_profile(profile):
         display_values(values)
 
 
-def display_opportunities(paires):
-    """Affiche les opportunités trouvées par le scraper.
+# Les deux étiquettes de la V0.5. Ce sont des constantes parce que l'affichage
+# les compte et que le programme les attribue : une faute de frappe dans l'une
+# des deux n'afficherait rien, sans erreur.
+NOUVELLE = "nouvelle"
+MISE_A_JOUR = "mise à jour"
 
-    C'est le résultat attendu de la V0.2, complété par la correspondance de la
-    V0.3. Les informations absentes ne sont pas affichées plutôt que d'être
-    inventées (docs/README.md §7).
 
-    `paires` associe chaque opportunité à son évaluation, pour que le score
-    soit lu au même endroit que les données qui l'ont produit.
+def resume(paires):
+    """Le compte de ce qui a été collecté, sans le détail.
+
+    C'est le résultat de la V0.2 et de la V0.3, réduit à ce qui survit à la
+    V0.5. Le détail des 69 fiches n'est plus imprimé : une veille quotidienne
+    qui réaffiche 69 fiches déjà lues n'est plus lisible, et c'est exactement ce
+    que la V0.5 vient corriger. Le compte dit ce qui a été vu et coûte une
+    ligne. Les 69 fiches restent dans `data/opportunities.json`.
+
+    Renvoie le nombre d'opportunités retenues, dont l'affichage a besoin pour
+    sa ligne « rien de nouveau ».
     """
     retenues = sum(1 for _, resultat in paires if resultat["matched"])
     print()
     print("=== Opportunités trouvées ===")
     print(f"{len(paires)} opportunités trouvées, {retenues} correspondent au profil")
     print()
+    return retenues
 
-    for number, (opportunity, resultat) in enumerate(paires, start=1):
-        marque = "OUI" if resultat["matched"] else "non"
-        print(f"{number}. {opportunity.title}   [{marque}]")
+
+def display_opportunities(a_signaler, retenues):
+    """N'affiche que ce qui n'a pas encore été montré.
+
+    C'est le résultat attendu de la V0.5 : ne signaler que les opportunités
+    nouvelles. `a_signaler` associe à chaque opportunité son évaluation et
+    l'étiquette qui dit pourquoi elle est là, `NOUVELLE` ou `MISE_A_JOUR`.
+
+    Le cahier des charges annonce un titre, « Nouvelles opportunités », et deux
+    éléments. Le titre retenu ici est « À signaler », parce qu'une mise à jour
+    n'est pas une nouvelle opportunité et qu'annoncer celle-là sous ce titre
+    serait faux. Le reste de l'exemple est respecté : seuls les éléments non
+    encore montrés sont listés, et rien d'autre.
+    """
+    print("=== À signaler ===")
+    if not a_signaler:
+        print(
+            f"Rien de nouveau : les {retenues} opportunités qui correspondent au "
+            "profil ont déjà été montrées."
+        )
+        print()
+        return
+
+    nouvelles = sum(1 for _, _, etiquette in a_signaler if etiquette == NOUVELLE)
+    mises_a_jour = len(a_signaler) - nouvelles
+    details = []
+    if nouvelles:
+        details.append(f"{nouvelles} nouvelle" + ("s" if nouvelles > 1 else ""))
+    if mises_a_jour:
+        details.append(
+            f"{mises_a_jour} mise" + ("s" if mises_a_jour > 1 else "") + " à jour"
+        )
+    print(f"{len(a_signaler)} à signaler : {', '.join(details)}")
+    print()
+
+    for number, (opportunity, resultat, etiquette) in enumerate(a_signaler, start=1):
+        print(f"{number}. [{etiquette}] {opportunity.title}")
         print(f"   Université : {opportunity.university}")
         print(f"   Pays        : {opportunity.country}")
         # Une bourse n'annonce pas de diplôme, et certaines pages de programmes
@@ -113,25 +164,50 @@ def main():
         opportunity.matched_criteria = resultat["reasons"]
         paires.append((opportunity, resultat))
 
-    display_opportunities(paires)
+    nb_retenues = resume(paires)
 
     # V0.4. L'historique enregistre tout ce qui a été collecté, y compris ce
     # qui ne correspond pas au profil : une offre écartée aujourd'hui peut
     # intéresser le jour où le profil change, et l'écarter définitivement
     # serait une information perdue.
     opportunities = [opportunity for opportunity, _ in paires]
-    nouvelles = sauvegarder(opportunities)
-    retenues = [o for o, resultat in paires if resultat["matched"]]
+    bilan = sauvegarder(opportunities)
 
-    # `vues` n'est memorise qu'apres l'affichage, pour qu'une opportunite
-    # comptee comme montree l'ait ete. C'est ce qui evite de la re-signaler.
+    # V0.5. Ce qui est signalé est choisi parmi les opportunités retenues. Une
+    # opportunité qui ne correspond pas au profil n'est pas une nouveauté : une
+    # veille est une sélection, pas un catalogue.
+    #
+    # Les deux listes sont disjointes, et c'est `modifiees_depuis` qui le
+    # garantit : ce qui n'a jamais été montré est nouveau, jamais une mise à
+    # jour. Les nouvelles passent d'abord, parce que c'est ce que l'étudiant
+    # n'attendait pas.
+    vues = charger_vus()
+    resultats = {identite(opportunity): resultat for opportunity, resultat in paires}
+    retenues = [opportunity for opportunity in opportunities if opportunity.matched]
+    a_signaler = [
+        (opportunity, resultats[identite(opportunity)], NOUVELLE)
+        for opportunity in nouvelles_depuis(retenues, vues)
+    ]
+    a_signaler += [
+        (opportunity, resultats[identite(opportunity)], MISE_A_JOUR)
+        for opportunity in modifiees_depuis(retenues, vues, bilan.modifiees)
+    ]
+
+    display_opportunities(a_signaler, nb_retenues)
+
+    # `vues` n'est mémorisé qu'après l'affichage, pour qu'une opportunité
+    # comptée comme montrée l'ait été. C'est ce qui évite de la re-signaler.
+    #
+    # Mémoriser toutes les retenues et mémoriser celles qui viennent d'être
+    # affichées donnent le même résultat : une retenue qui n'est ni nouvelle ni
+    # modifiée a déjà été montrée, donc elle est déjà dans le fichier.
     conservees = conserver_vus(retenues)
 
     print()
     print("=== Sauvegarde ===")
     print(f"{len(opportunities)} opportunités enregistrées dans data/opportunities.json")
-    print(f"{len(nouvelles)} nouvelles depuis la dernière exécution")
-    print(f"{len(conservees)} opportunités déjà montées, dans data/seen.json")
+    print(f"{len(bilan.nouvelles)} nouvelles depuis la dernière exécution")
+    print(f"{len(conservees)} opportunités déjà montrées, dans data/seen.json")
 
 
 if __name__ == "__main__":
