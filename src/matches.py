@@ -81,10 +81,10 @@ CRITERES_RETENUS = {
     "scholarships": ("niveau", "international"),
 }
 
-# Type retenu quand la source ne le déclare pas. Les pages qui décrivent des
-# conditions d'admission ne produisent pas d'opportunités : le seul type qui
-# reste sans information est celui-ci, où l'on se rabat sur la lecture d'un
-# programme.
+# Type retenu quand la source en déclare un qui n'a pas de budget. C'est le cas
+# de `eligibility`, que porte « KAIST - Eligibility Requirements » : une page
+# de conditions n'a pas de matière à comparer, et la lire comme un programme
+# est le seul traitement qui ne jette pas ce qu'elle publie.
 TYPE_PAR_DEFAUT = "programs"
 
 # « Master's-Ph.D. Integrated » est un diplôme différent de « Master's ».
@@ -104,6 +104,10 @@ NIVEAUX_LARGES = ("graduate",)
 NIVEAUX_DOCTORAUX = ("ph.d", "phd", "doctorate", "doctoral")
 
 # Mots qui réservent une aide à une population du pays d'accueil.
+#
+# La recherche se fait par mot entier, jamais par sous-chaîne : voir
+# `mesure_international`, où une sous-chaîne confondait « international
+# students » et « national student ».
 RESTRICTIONS_NATIONALES = ("citizen", "domestic", "national student", "home student")
 
 # Mots qui signalent une prise en charge complète des frais de scolarité.
@@ -127,14 +131,16 @@ def variantes(terme):
     sous-chaîne laisserait passer ce programme, qui est pourtant pertinent.
 
     On ne fait pas de stemming complet, seulement deux formes : le mot tel
-    qu'il est écrit, et son singulier. C'est volontaire : une règle plus
-    sophistiquée serait difficile à justifier, et le pluriel anglais est la
-    seule différence constatée sur les sources réelles.
+    qu'il est écrit, et l'autre forme de son nombre, singulier ou pluriel. La
+    forme est déduite de la terminaison, donc « national student » donne aussi
+    « national students », ce qui compte pour une liste de mots entiers. C'est
+    volontaire : une règle plus sophistiquée serait difficile à justifier, et le
+    pluriel anglais est la seule différence constatée sur les sources réelles.
     """
-    formes = {terme.lower()}
-    if terme.lower().endswith("s"):
-        formes.add(terme.lower()[:-1])
-    return formes
+    mot = terme.lower()
+    if mot.endswith("s"):
+        return {mot, mot[:-1]}
+    return {mot, mot + "s"}
 
 
 def contient(texte, terme):
@@ -157,10 +163,18 @@ def contient_mot(texte, mot):
     La différence est décisive sur les niveaux de diplôme : « undergraduate »
     contient « graduate », donc une bourse de premier cycle passerait pour une
     bourse de Master. Une recherche par sous-chaîne ne suffit pas ici.
+
+    Elle l'a été aussi sur les populations nationales : « international
+    students » contient « national student ». Une bourse entièrement ouverte
+    était donc comptée comme réservée aux nationaux, puis écartée, parce que la
+    formule la plus courante du monde était confondue avec son contraire. Les
+    trois bourses de KAIST y échappaient par chance, la page écrivant
+    « applicants ». Voir `mesure_international`.
     """
     if not texte:
         return False
-    return re.search(rf"\b{re.escape(mot)}\b", texte.lower()) is not None
+    texte = texte.lower()
+    return any(re.search(rf"\b{re.escape(forme)}\b", texte) for forme in variantes(mot))
 
 
 # Apostrophes typographiques. Les pages d'universités écrivent « Master’s » là
@@ -328,6 +342,12 @@ def mesure_niveau(opportunity, profil, points):
     qui peut en bénéficier. C'est le sens de l'éligibilité publiée, et c'est
     elle qui permet de distinguer une bourse de Master d'une bourse de
     doctorat.
+
+    L'éligibilité est lue en premier, mais pas seule : le diplôme et le titre
+    suivent, sur le même principe que `mesure_diplome`. Une bourse dont la page
+    d'éligibilité est vide mais qui est nommée « Master's Scholarship » dit
+    quand même à qui elle s'adresse, et l'ignorer reviendrait à jeter une
+    information publiée.
     """
     texte = texte_de(opportunity.eligibility, opportunity.degree, opportunity.title)
     if not texte:
@@ -358,7 +378,7 @@ def mesure_international(opportunity, profil, points):
     if not texte:
         return _mesure("international", 0, "éligibilité non publiée")
 
-    if any(mot in texte for mot in RESTRICTIONS_NATIONALES):
+    if any(contient_mot(texte, restriction) for restriction in RESTRICTIONS_NATIONALES):
         return _mesure("international", 0, "réservée à une population nationale")
     if contient_mot(texte, "international"):
         return _mesure("international", points, "ouverte aux étudiants internationaux")
@@ -456,10 +476,18 @@ def evaluer(opportunity, profil):
     Le type d'opportunité est renvoyé avec le reste, parce que le score n'a de
     sens que rapporté au maximum du type : 85 sur 100 pour un programme et
     100 sur 100 pour une bourse ne se comparent pas.
+
+    Le type renvoyé est celui dont le budget a été appliqué, et non celui que la
+    source déclare. Un registre peut déclarer un type qui n'a pas de budget, comme
+    `eligibility` : la page est alors notée comme un programme, donc elle doit
+    être annoncée comme un programme. Annoncer `eligibility` avec 100 points
+    maximum afficherait un score et un libellé qui ne se correspondent pas. Le
+    type d'origine n'est pas perdu pour autant : il reste sur l'opportunité et
+    dans la fiche sauvegardée.
     """
-    type_opp = opportunity.type or TYPE_PAR_DEFAUT
-    budget = CRITERES.get(type_opp, CRITERES[TYPE_PAR_DEFAUT])
-    retenus = CRITERES_RETENUS.get(type_opp, CRITERES_RETENUS[TYPE_PAR_DEFAUT])
+    type_opp = opportunity.type if opportunity.type in CRITERES else TYPE_PAR_DEFAUT
+    budget = CRITERES[type_opp]
+    retenus = CRITERES_RETENUS[type_opp]
 
     mesures = [MESURES[nom](opportunity, profil, points) for nom, points in budget.items()]
 

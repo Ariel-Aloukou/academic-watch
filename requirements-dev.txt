@@ -1,0 +1,15 @@
+# Dépendances de développement, pas de production.
+#
+# Volontairement séparé de requirements.txt : le programme n'a pas besoin de
+# pytest ni de PyYAML pour fonctionner, et le workflow les installe donc à part.
+# Un programme de veille qui a besoin d'un framework de test pour démarrer n'est
+# plus minimal.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   python -m pytest
+
+pytest>=9.0
+
+# Relit .github/workflows/veille.yml dans les tests. Ce fichier ne peut pas être
+# lancé chez soi, donc une faute dedans ne se verrait qu'à 07:00 UTC.
+PyYAML>=6.0
