@@ -473,6 +473,122 @@ C
 D
 ```
 
+## La décision : ce qui est signalé
+
+Deux réponses étaient possibles, et la question a été posée plutôt que décidée
+dans le code.
+
+**Seulement les retenues jamais montrées.** Le run quotidien affiche « rien de
+nouveau » en trois lignes. Son défaut est qu'elle se tait sur ce qui change.
+
+**Les retenues nouvelles, plus celles dont les données ont changé.** C'est celle
+qui est implémentée. Une bourse qui publie une date limite ou un montant deux
+semaines après son annonce mérite d'être re-signalée : c'est exactement
+l'information qu'un étudiant vient chercher, et c'est la seule qu'il ne reverra
+pas en relisant la même page.
+
+Une opportunité qui ne correspond pas au profil n'est jamais signalée, même
+lorsqu'elle est nouvelle. Une veille est une sélection, pas un catalogue :
+`main.py` ne présente donc que les opportunités retenues.
+
+## État mesuré
+
+Trois exécutions réelles sur les 69 fiches, et non un exemple inventé :
+
+| Situation | Sortie |
+| --------- | ------ |
+| `data/seen.json` vidé | `9 à signaler : 9 nouvelles` |
+| exécution suivante, rien n'a bougé | `Rien de nouveau : les 9 opportunités qui correspondent au profil ont déjà été montrées.` |
+| une URL modifiée à la main dans `opportunities.json` | `1 à signaler : 1 mise à jour` |
+
+Les trois fois, code de retour 0 et `stderr` vide. Au troisième cas, la donnée
+écrite à la main est remplacée par la valeur réellement collectée : le
+programme ne fabrique rien, il constate.
+
+Ce que la version précédente affichait sur les mêmes fiches : **768 lignes**,
+les 69 opportunités répétées en entier. La version actuelle affiche 11 lignes
+après le profil dans le cas courant, et 156 quand les 9 retenues sont
+signalées. La réduction ne vient pas d'un filtrage : le détail des 69 fiches
+était affiché, il ne l'est plus. Il reste dans `data/opportunities.json`, et le
+compte est toujours dit.
+
+## Les trois mensonges que la version doit éviter
+
+Une fonction qui décide ce qu'on annonce se juge sur les phrases qu'elle
+produit, pas sur le code qu'elle écrit. Trois cas produisent ici une
+affirmation fausse, et les trois sont traités.
+
+**« Mise à jour » sur une opportunité que personne n'a jamais vue.** Une
+opportunité collectée la veille, écartée par le profil, et dont la page change
+aujourd'hui : elle n'est pas dans `seen.json`, donc rien n'a été mis à jour pour
+l'étudiant. Elle est nouvelle. C'est la raison pour laquelle `modifiees_depuis`
+exige les deux conditions, déjà montrée *et* modifiée, et les deux listes
+sont disjointes par construction : rien n'est compté deux fois.
+
+**Un compte de nouvelles qui serait un compte de collectées.** `sauvegarder`
+rend les identités absentes de `opportunities.json`, donc ce que le programme
+n'avait jamais *collecté*. C'est un autre compte, et il reste affiché sous son
+vrai nom, dans la section « Sauvegarde ».
+
+**Une information perdue parce qu'elle a déjà été affichée.** Le changement est
+détecté au moment de la sauvegarde, parce que c'est là que la version précédente
+de la fiche existe encore. Le `Bilan` qui le porte est donc consommé avant
+l'affichage : si le programme s'arrête entre les deux, la mise à jour est
+perdue pour cette fois. Le cas est mesuré et non traité.
+
+## Ce que `sauvegarder` rend désormais
+
+`sauvegarder` ne rendait qu'une liste, celle des nouvelles. Il rend maintenant un
+`Bilan` à deux champs, `nouvelles` et `modifiees`. La comparaison qui produit la
+seconde existait déjà dans cette fonction, au point où la version précédente de
+la fiche est encore en mémoire : la faire ailleurs aurait obligé à relire le
+fichier et à dupliquer `a_change`, donc à avoir deux règles qui divergent en
+silence. La première divergence serait apparue comme une annonce fausse, sans
+erreur.
+
+Quatre tests nouveaux dans `test_storage.py` couvrent la distinction : la
+modification d'une fiche déjà montrée est signalée, celle d'une fiche jamais
+montrée ne l'est pas, une collecte identique ne signale rien, et les deux
+listes ne se recouvrent pas. Les deux derniers sont ceux qui comptent tous
+les jours. Trois tests existants ont reçu une assertion sur `modifiees`.
+
+L'affichage a ses dix tests dans `tests/test_main.py`, un fichier créé pour la
+V0.5 : c'est la seule version qui change ce que le programme montre, donc la
+seule dont la sortie vaut d'être vérifiée. Le cas le plus important est le
+plus courant : un jour sans nouveauté ne doit pas réimprimer les fiches déjà
+lues, il doit dire qu'il n'y a rien et s'arrêter là.
+
+## Écart avec le cahier des charges
+
+Le cahier annonce un titre, « Nouvelles opportunités ». Le titre retenu est
+« À signaler », et l'écart est assumé : une mise à jour n'est pas une nouvelle
+opportunité, et l'annoncer sous ce titre serait faux. Le reste de l'exemple est
+respecté, seuls les éléments non encore montrés sont listés.
+
+Le cahier ne dit rien de l'ordre dans lequel les signaler. Les nouvelles
+passent d'abord, parce que c'est ce que l'étudiant n'attendait pas. Elles
+suivent l'ordre de collecte et ne sont pas triées par score : deux types
+d'opportunités n'ont pas le même maximum, donc un tri par score brut
+comparerait un 85 sur 100 à un 70 sur 100 sans que la comparaison ait un sens.
+Trier par score relatif serait une décision à part, et elle n'est pas prise ici.
+
+## Limites assumées
+
+* **Une opportunité qui cesse de correspondre n'est pas signalée.** Changer
+  `config/profile.json` peut faire tomber une retenue sous le seuil, et le
+  programme ne le dira pas. Rien dans `data/` ne permet de savoir ce qui était
+  retenu la dernière fois : `seen.json` ne contient que des identités.
+* **Changer le profil signale comme mise à jour.** Le score fait partie de la
+  fiche, donc un profil modifié change la fiche des retenues concernées et les
+  signale. C'est le comportement voulu, le profil ayant changé l'information
+  affichée n'est plus la même, mais le signal parle alors du profil et pas du
+  site.
+* **La mise à jour est consommée avant l'affichage.** Si le programme s'arrête
+  entre la sauvegarde et l'affichage, elle n'est pas rejouée le lendemain.
+* **Une fiche dont le titre est reformulé revient comme nouvelle.** C'est la
+  conséquence de l'identité en trois champs, écrite en V0.4 et non mesurée
+  depuis.
+
 ---
 
 # V0.6 - Première notification

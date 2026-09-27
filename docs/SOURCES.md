@@ -636,9 +636,9 @@ tard ». Le programme ne comble rien (docs/README.md §7).
 | `field` | domaines de recherche | non | KAIST en publie, TUM non |
 | `description` | texte libre | non | TUM oui, KAIST non |
 
-Un programme sans `url` estjeté : une opportunité non cliquable ne peut être ni
+Un programme sans `url` est jeté : une opportunité non cliquable ne peut être ni
 vérifiée par l'étudiant, ni notifiée utilement. C'est la seule raison pour
-laquelle une opportunity est abandonnée au lieu d'être complétée.
+laquelle une opportunité est abandonnée au lieu d'être complétée.
 
 ---
 

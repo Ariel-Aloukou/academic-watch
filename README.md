@@ -3,9 +3,10 @@
 Veille académique : recherche de programmes de Master et de financements
 correspondant à un profil, sur des sources officielles.
 
-Le projet en est à la **V0.4** : quatre sources sont extraites, la correspondance
-avec le profil classe les opportunités et explique pourquoi, et le résultat est
-écrit sur disque. Sur les 69 opportunités collectées, 9 correspondent au profil.
+Le projet en est à la **V0.5** : quatre sources sont extraites, la correspondance
+avec le profil classe les opportunités et explique pourquoi, le résultat est
+écrit sur disque, et le programme **ne signale que ce qui n'a pas encore été
+montré**. Sur les 69 opportunités collectées, 9 correspondent au profil.
 Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 
 ## État réel
@@ -16,7 +17,7 @@ Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 | V0.2 | Collecte et extraction des sources | fait, 4 sources, 69 opportunités |
 | V0.3 | Correspondance avec le profil | fait, 9 retenues sur 69 |
 | V0.4 | Sauvegarde des résultats | fait, 69 fiches et 9 déjà vues |
-| V0.5 | Détection des nouveautés | à faire |
+| V0.5 | Détection des nouveautés | fait, 9 signalées puis 0 au run suivant |
 | V0.6 | Notification | à faire |
 | V0.7 | Passage à l'échelle | à faire |
 | V0.8 | GitHub Actions | écrit et testé, **jamais exécuté sur GitHub** |
@@ -28,8 +29,10 @@ distingue ce qui a été mesuré négatif de ce qui n'a pas pu être lu.
 
 Le programme télécharge les pages au moment de l'exécution et **écrit deux
 fichiers** dans `data/` : l'historique complet et la mémoire de ce qui a déjà
-été montré. Relancer le programme ne signale plus rien de neuf tant que les
-sources n'ont pas changé.
+été montré. Il n'affiche plus que les opportunités retenues qui n'ont pas
+encore été montrées, et celles dont la page a changé depuis la dernière
+exécution. Relancer le programme ne signale plus rien tant que les sources
+n'ont pas changé : le cas courant est un « rien de nouveau » en trois lignes.
 
 ## Exécution automatique
 
@@ -75,7 +78,7 @@ academic-watch/
 │   ├── matches.py          # Correspondance avec le profil, score, raisons
 │   ├── storage.py          # Historique JSON et détection des doublons
 │   └── notifier.py         # Vide - V0.6
-├── tests/                  # 231 tests, lancés par pytest
+├── tests/                  # 253 tests, lancés par pytest
 ├── pytest.ini
 ├── requirements.txt
 ├── requirements-dev.txt
@@ -112,9 +115,10 @@ pour fonctionner, et le workflow l'installe donc séparément.
 python -m pytest
 ```
 
-231 tests, environ deux secondes, **sans accès au réseau**. Ils vérifient la
-sauvegarde, la correspondance avec le profil, la cohérence des deux fichiers de
-`data/`, les choix écrits du workflow, et l'encodage des fichiers du dépôt.
+253 tests, environ deux secondes, **sans accès au réseau**. Ils vérifient la
+sauvegarde, la correspondance avec le profil, ce que la veille affiche, la
+cohérence des deux fichiers de `data/`, les choix écrits du workflow, et
+l'encodage des fichiers du dépôt.
 
 Aucun test ne dépend d'une page vivante. Ce qui dépend d'un site est vérifié à
 la main et écrit dans `docs/SOURCES.md` : un test qui dépend d'un site étranger
@@ -139,11 +143,17 @@ Collecter et afficher les opportunités :
 python src/main.py
 ```
 
-Chaque opportunité est affichée avec son score et la raison de chaque critère,
-et `[OUI]` ou `[non]` indique si elle est retenue. Un programme et une bourse
-ne sont pas mesurés de la même façon : un programme se juge sur sa matière, une
-bourse sur qui peut en bénéficier. Les détails sont dans `docs/VERSIONS.md`
-V0.3.
+Le programme n'affiche **que ce qu'il faut signaler** : les opportunités
+retenues jamais montrées, et celles dont la fiche a changé depuis la dernière
+exécution. Chacune est affichée avec son score et la raison de chaque critère,
+et `[nouvelle]` ou `[mise à jour]` dit pourquoi elle est là. Un programme et une
+bourse ne sont pas mesurés de la même façon : un programme se juge sur sa
+matière, une bourse sur qui peut en bénéficier. Les détails sont dans
+`docs/VERSIONS.md` V0.3, et le choix de ce qui est signalé dans V0.5.
+
+Le détail des 69 fiches n'est plus imprimé : une veille quotidienne qui réaffiche
+69 fiches déjà lues n'est plus lisible. Le compte reste affiché, et les 69 fiches
+restent dans `data/opportunities.json`.
 
 Cette commande **écrit deux fichiers** dans `data/` :
 
@@ -151,10 +161,11 @@ Cette commande **écrit deux fichiers** dans `data/` :
   date de première apparition, et ses données sont rafraîchies ;
 * `seen.json`, la mémoire de ce qui a déjà été montré.
 
-Lancer la commande une seconde fois de suite affiche donc `0 nouvelles depuis la
-dernière exécution`, et ne réécrit pas les fichiers : rien n'ayant changé, il
-n'y a rien à écrire. C'est ce qui permettra plus tard à GitHub Actions de ne
-commiter que lorsqu'il y a effectivement quelque chose de nouveau.
+Lancer la commande une seconde fois de suite affiche donc `Rien de nouveau` et
+`0 nouvelles depuis la dernière exécution`, et ne réécrit pas les fichiers :
+rien n'ayant changé, il n'y a rien à écrire. C'est ce qui permet à GitHub
+Actions de ne commiter que lorsqu'il y a effectivement quelque chose de
+nouveau.
 
 Les deux fichiers sont versionnés, parce qu'une veille qui recommence à zéro
 chaque jour ne sert à rien. Pour repartir de zéro, les vider ou les supprimer —

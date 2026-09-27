@@ -101,7 +101,7 @@ jobs:
 
           git config user.name "academic-watch"
           git config user.email "academic-watch@users.noreply.github.com"
-          git commit -m "$sujet" -m "$(grep -aE 'correspondent au profil|nouvelles depuis|dans data/' journal.txt || true)"
+          git commit -m "$sujet" -m "$(grep -aE 'correspondent au profil|nouvelles depuis|dans data/|Rien de nouveau' journal.txt || true)"
 
           # Filet de sécurité : si quelqu'un a poussé entre le checkout et
           # maintenant, le push direct est refusé. Rebaser plutôt que forcer,
@@ -118,6 +118,18 @@ jobs:
           {
             echo "## Academic Watch"
             echo
-            grep -aE 'correspondent au profil|nouvelles depuis|dans data/' journal.txt \
+            grep -aE 'correspondent au profil|nouvelles depuis|dans data/|Rien de nouveau' journal.txt \
               || echo "La veille n'a rien produit."
+            echo
+            # La section « À signaler » est recopiée entière. C'est elle qui
+            # porte le résultat de la V0.5, et un compte sans le détail ne dit
+            # rien à l'étudiant : il ouvrirait le journal pour rien. Les deux
+            # ancres sont en ASCII, comme les motifs ci-dessus, pour la même
+            # raison de locale.
+            #
+            # `|| true` parce que cette étape s'exécute aussi quand la veille a
+            # échoué, donc quand `journal.txt` n'existe pas. Sans cela, l'échec
+            # de `sed` ferait échouer le résumé, qui existe justement pour dire
+            # que la veille n'a rien produit.
+            sed -n '/signaler ===/,/Sauvegarde ===/p' journal.txt || true
           } >> "$GITHUB_STEP_SUMMARY"

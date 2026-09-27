@@ -113,9 +113,43 @@ def test_les_motifs_du_message_ne_contiennent_pas_d_accent(etapes):
     # il ne trouve rien, et le message de commit devient vide sans erreur. Les
     # motifs retenus sont donc des extraits sans accent.
     bloc = etapes["Enregistrer les résultats"]["run"]
-    for motif in ("correspondent au profil", "nouvelles depuis", "dans data/"):
+    for motif in (
+        "correspondent au profil",
+        "nouvelles depuis",
+        "dans data/",
+        "Rien de nouveau",
+    ):
         assert motif.isascii()
         assert motif in bloc
+
+
+def test_le_resume_recopie_la_section_a_signaler(etapes):
+    # C'est le resultat de la V0.5. Sans cette section, le run automatique
+    # affiche « 0 nouvelles depuis la derniere execution » et l'etudiant doit
+    # ouvrir le journal pour savoir ce qui a ete trouve.
+    resume = etapes["Résumé de la veille"]["run"]
+    assert "signaler ===" in resume
+    assert "Sauvegarde ===" in resume
+    assert "GITHUB_STEP_SUMMARY" in resume
+
+
+def test_les_ancres_de_la_section_sont_en_ascii(etapes):
+    # Meme raison que les motifs de grep : une ancre accentuee ne trouve rien
+    # sur une locale non UTF-8, et le resume serait vide sans erreur.
+    resume = etapes["Résumé de la veille"]["run"]
+    for ancre in ("signaler ===", "Sauvegarde ==="):
+        assert ancre.isascii()
+        assert ancre in resume
+
+
+def test_le_resume_ne_echoue_pas_sans_journal(etapes):
+    # L'etape s'execute aussi quand la veille a echoue, donc quand journal.txt
+    # n'existe pas. Sans `|| true`, l'echec de `sed` ferait echouer le resume,
+    # qui existe justement pour dire que la veille n'a rien produit.
+    resume = etapes["Résumé de la veille"]["run"]
+    sed = [ligne for ligne in resume.split("\n") if "sed -n" in ligne]
+    assert len(sed) == 1
+    assert sed[0].rstrip().endswith("|| true")
 
 
 # 3. Le planning, qui est une décision et non un réglage

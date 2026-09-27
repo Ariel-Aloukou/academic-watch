@@ -184,10 +184,30 @@ collecter
    ↓
 enregistrer
    ↓
+choisir ce qui doit être signalé
+   ↓
 notifier
 ```
 
 Il doit rester simple.
+
+### Ce que la V0.5 a décidé
+
+L'étape « choisir ce qui doit être signalé » est celle qui décide de ce que
+l'étudiant lit. Elle ne porte que sur les opportunités **retenues** : une
+opportunité qui ne correspond pas au profil n'est jamais annoncée, même si
+elle est nouvelle. Une veille est une sélection, pas un catalogue.
+
+Sont signalées les retenues jamais montrées, et les retenues déjà montrées
+dont la fiche a changé depuis la dernière exécution. Les deux listes sont
+disjointes par construction, donc rien n'est compté deux fois, et une
+opportunité inconnue n'est jamais annoncée comme une mise à jour : ce
+serait un mensonge, puisque personne ne l'a jamais vue.
+
+C'est aussi la version où le détail des 69 fiches cesse d'être imprimé. Le
+compte reste affiché, et les 69 fiches restent dans `data/opportunities.json`.
+Ce qui a été retiré de l'écran est ce qui est mesuré et écrit, pas ce qui
+est perdu.
 
 ---
 
@@ -321,6 +341,24 @@ offre écartée aujourd'hui peut intéresser le jour où le profil change.
 opportunité existe et savoir qu'on l'a déjà signalée sont deux informations
 différentes, et la seconde est la seule qui évite de la répéter indéfiniment.
 
+### Ce que la V0.5 a décidé
+
+`sauvegarder` rend un `Bilan` à deux champs, `nouvelles` et `modifiees`. Le
+second n'a pas demandé une nouvelle lecture du fichier : la comparaison qui le
+produit existait déjà dans `sauvegarder`, au point où la version précédente de
+la fiche est encore en mémoire. La refaire ailleurs aurait dupliqué
+`a_change`, donc créé deux règles capables de diverger en silence.
+
+Deux fonctions lisent ce bilan, et une seule condition chacune :
+
+| Fonction | Ce qu'elle rend |
+| -------- | --------------- |
+| `nouvelles_depuis` | ce qui n'a jamais été montré |
+| `modifiees_depuis` | ce qui a déjà été montré **et** dont la fiche a changé |
+
+La seconde condition n'est pas un détail : sans elle, une opportunité
+collectée mais jamais montrée serait annoncée comme une mise à jour.
+
 ---
 
 ## `tests/`
@@ -336,6 +374,7 @@ temporaire.
 | ------- | ------------------ |
 | `test_storage.py` | la sauvegarde, l'identité, le refus d'un fichier illisible |
 | `test_correspondance.py` | les paliers, le diplôme, les bourses, les contrats du module |
+| `test_main.py` | ce que la veille affiche, et le cas d'un jour sans nouveauté |
 | `test_donnees.py` | la cohérence des deux fichiers versionnés dans `data/` |
 | `test_workflow.py` | les choix écrits du workflow, le seul fichier non lançable en local |
 | `test_proprete.py` | l'encodage des fichiers et les caractères qui se glissent dedans |
