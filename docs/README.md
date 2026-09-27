@@ -132,12 +132,21 @@ academic-watch/
 │   ├── GITHUB_PYTHON.md
 │   └── SOURCES.md
 │
+├── tests/                    # Ajouté en V0.4, absent de la structure d'origine
+│
 ├── requirements.txt
+├── requirements-dev.txt
 ├── .gitignore
 └── README.md
 ```
 
 La structure pourra évoluer, mais elle doit rester compréhensible.
+
+`tests/` et `requirements-dev.txt` ne figuraient pas dans la structure
+d'origine. Ils ont été ajoutés après la V0.4, quand les tests écrits pour
+construire les versions ont été mis dans le dépôt. Ils restent séparés des
+dépendances de production : le programme n'a pas besoin d'un framework de test
+pour fonctionner.
 
 ---
 
@@ -259,6 +268,28 @@ registre ne publie de date, ce qui a été vérifié page par page. Ce serait do
 un lecteur de dates jamais exécuté sur une vraie valeur. Voir
 `docs/SOURCES.md` §6.3.
 
+### Deux pièges de sous-chaîne, trouvés en même temps
+
+Une recherche par sous-chaîne trouve le mot là où il est, et aussi à l'intérieur
+d'un autre mot. Deux fois, cela a produit un résultat faux, et les deux fois
+comme un **faux négatif** : l'opportunité disparaissait au lieu d'être signalée à
+tort. C'est le sens d'erreur le plus coûteux pour une veille.
+
+| Texte publié | Recherche par sous-chaîne | Recherche par mot entier |
+| ------------ | ------------------------- | ----------------------- |
+| « undergraduate » | contient « graduate » : une bourse de premier cycle passerait pour une bourse de Master | pas de match, et c'est juste |
+| « Open to international students » | contient « national student » : bourse entièrement ouverte comptée comme réservée aux nationaux, 25 points perdus, écartée | pas de match, et c'est juste |
+
+Le second n'a pas été trouvé en relisant le code, mais en écrivant les tests. Les
+trois bourses de KAIST y échappaient par hasard, la page écrivant
+« applicants ». Une source écrivant « students » l'aurait déclenché.
+
+La règle qui en découle : tout mot qui sert à **exclure** est cherché mot entier.
+Un mot qui sert à inclure peut être cherché par sous-chaîne, parce qu'une
+inclusion trop large fait remonter une opportunité inutile, ce qui se voit
+tout de suite ; une exclusion trop large fait disparaître une opportunité, ce
+qui ne se voit jamais.
+
 ---
 
 ## `src/storage.py`
@@ -289,6 +320,40 @@ offre écartée aujourd'hui peut intéresser le jour où le profil change.
 `seen.json` contient ce qui a déjà été *montré* à l'utilisateur. Savoir qu'une
 opportunité existe et savoir qu'on l'a déjà signalée sont deux informations
 différentes, et la seconde est la seule qui évite de la répéter indéfiniment.
+
+---
+
+## `tests/`
+
+Contient les tests, lancés par `python -m pytest`.
+
+Ils ne figuraient pas dans la structure d'origine du cahier des charges. Ils
+ont été ajoutés après la V0.4, quand les tests qui avaient servi à construire
+chaque version ont été mis dans le dépôt au lieu de rester dans un dossier
+temporaire.
+
+| Fichier | Ce qu'il surveille |
+| ------- | ------------------ |
+| `test_storage.py` | la sauvegarde, l'identité, le refus d'un fichier illisible |
+| `test_correspondance.py` | les paliers, le diplôme, les bourses, les contrats du module |
+| `test_donnees.py` | la cohérence des deux fichiers versionnés dans `data/` |
+| `test_workflow.py` | les choix écrits du workflow, le seul fichier non lançable en local |
+| `test_proprete.py` | l'encodage des fichiers et les caractères qui se glissent dedans |
+
+Trois règles, apprises en les écrivant :
+
+* **aucun test ne touche au réseau.** Ce qui dépend d'une page vivante est
+  vérifié à la main et écrit dans `docs/SOURCES.md`. Un test qui dépend d'un site
+  étranger échoue pour une raison qui n'a rien à voir avec le code ;
+* **aucun test n'écrit dans le vrai `data/`.** Un `conftest.py` redirige les
+  chemins d'écriture de `storage` vers un dossier temporaire, pour tous les
+  tests sans exception ;
+* **aucun test de propreté n'impose un style.** Un test de ce type qui échoue
+  oblige à reformater des fichiers qu'on n'a pas choisi de reformater, et
+  `config/profile.json` est le travail de l'étudiant. `test_proprete.py` ne
+  contrôle donc que des défauts qui cassent quelque chose.
+
+Le workflow les exécute avant chaque collecte.
 
 ---
 

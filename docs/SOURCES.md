@@ -78,7 +78,9 @@ déduit de mesures, jamais d'une impression :
 | `bloque` | HTTP 403 ou 412 | injoignable pour un script, peut rester valable pour un humain |
 | `injoignable` | timeout, DNS, autre code 4xx/5xx | retester plus tard |
 
-Le dernier bilan : 7 sources `exploitable`, 9 `a_tester`, 2 `bloque`.
+Le bilan chiffré est au chapitre 5. Il n'est pas répété ici : deux copies d'un
+chiffre mesuré finissent toujours par diverger, et c'est la moins récente qui
+serait lue comme la bonne.
 
 Deux limites honnêtes de cet outil, à connaître avant de lui faire confiance :
 
@@ -343,21 +345,29 @@ rentable du projet.** Les categories 1 et 2 doivent être renforcées en priorit
 
 # 5. Bilan de la validation
 
+Mesuré le 27 septembre 2026, par quatre exécutions successives de
+`python src/scraper.py` le même jour. Les quatre ont donné le même tableau.
+
 | Verdict | Nombre | Sources |
 | ------- | ------ | ------- |
 | `exploitable` | 7 | TUM, NTNU, KAIST – Eligibility, UBC, EduCanada – Bourses, Study in Japan – MEXT, EACEA |
 | `a_tester` | 10 | KAIST – Explore Programs, KAIST – Scholarship, EduCanada – Programmes, DAAD, Study in Japan x2, Study in Korea x2, Study in Norway, Erasmus Mundus |
-| `bloque` | 1 | Study in China – CSC |
-| `injoignable` | 1 | Campus China |
+| `bloque` | 2 | Campus China, Study in China – CSC |
+| `injoignable` | 0 | — |
+
+Ce tableau est une **mesure**, pas une propriété permanente. Un site peut
+changer de verdict d'un jour à l'autre, et les deux sources chinoises l'ont fait :
+elles répondaient `HTTP 412` les quatre fois le 27 septembre, et Campus China ne
+répondait plus du tout deux jours plus tôt, sur quatre tentatives et sur les deux
+schémas. La sortie de `src/scraper.py` fait foi sur l'état du jour.
 
 Trois nuances que le tableau ne montre pas :
 
-* **Campus China a changé de verdict entre deux exécutions.** Elle répondait
-  `HTTP 412` quand ce tableau a été écrit, elle ne répond plus du tout
-  aujourd'hui : quatre tentatives, sur `http` et `https`, toutes en erreur de
-  connexion. Un site qui passe de « bloque les robots » à « ne répond pas » ne
-  peut pas être surveillé, quel que soit le verdict affiché. C'est la
-  situation la moins favorable des deux, et c'est celle qui compte ;
+* **Les deux sources chinoises ne sont pas exploitables, quel que soit le
+  verdict affiché.** `bloque` signifie qu'un script ne passe pas, `injoignable`
+  que le serveur ne répond plus. Aucune des deux situations ne se surveille, et
+  un site qui passe de l'une à l'autre ne peut pas être suivi. C'est la situation
+  la moins favorable des deux qui compte, donc les deux sont écartées ;
 
 * **Deux sources implémentées sont classées `a_tester` alors qu'elles
   produisent des opportunités.** KAIST – Explore Programs et KAIST –

@@ -19,6 +19,7 @@ Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 | V0.5 | Détection des nouveautés | à faire |
 | V0.6 | Notification | à faire |
 | V0.7 | Passage à l'échelle | à faire |
+| V0.8 | GitHub Actions | écrit et testé, **jamais exécuté sur GitHub** |
 
 Deux critères de la V0.3 ne sont pas implémentés, et ne le sont pas par oubli :
 aucune source ne renseigne de langue d'enseignement, et aucune ne publie de
@@ -30,13 +31,29 @@ fichiers** dans `data/` : l'historique complet et la mémoire de ce qui a déjà
 été montré. Relancer le programme ne signale plus rien de neuf tant que les
 sources n'ont pas changé.
 
+## Exécution automatique
+
+Le workflow `.github/workflows/veille.yml` collecte chaque jour à 07:00 UTC,
+puis **committe `data/`**. Ce commit est indispensable : un runner GitHub
+Actions est une machine jetable, et sans lui la veille fonctionnerait en local
+et perdrait toute mémoire dès le premier run automatique.
+
+Un commit n'est fait que si `data/` a réellement changé, donc une journée sans
+nouveauté ne produit rien dans l'historique du dépôt. Le message dit ce qui a
+été trouvé, et le résultat est affiché en tête de run.
+
+Le workflow est écrit et testé, mais **il n'a pas encore été exécuté sur
+GitHub**. C'est le seul endroit du projet qui ne peut pas être validé en local.
+Il reste à l'activer, ou à attendre le prochain 07:00 UTC. Le détail des
+choix est dans `docs/VERSIONS.md` V0.8.
+
 ## Architecture
 
 ```
 academic-watch/
 ├── .github/
 │   └── workflows/
-│       └── veille.yml      # Exécution planifiée (07:00 UTC) - non branchée
+│       └── veille.yml      # Exécution planifiée (07:00 UTC) + commit des données
 ├── config/
 │   ├── profile.json        # Tes critères de recherche
 │   ├── sources.json        # Registre des sources à surveiller
@@ -58,7 +75,10 @@ academic-watch/
 │   ├── matches.py          # Correspondance avec le profil, score, raisons
 │   ├── storage.py          # Historique JSON et détection des doublons
 │   └── notifier.py         # Vide - V0.6
+├── tests/                  # 231 tests, lancés par pytest
+├── pytest.ini
 ├── requirements.txt
+├── requirements-dev.txt
 ├── README.md
 └── .gitignore
 ```
@@ -76,6 +96,40 @@ python -m venv venv
 venv\Scripts\activate      # Windows
 pip install -r requirements.txt
 ```
+
+Pour DEVELOPPER, il faut aussi les dépendances de test :
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Elles sont à part, et c'est volontaire : le programme n'a pas besoin de pytest
+pour fonctionner, et le workflow l'installe donc séparément.
+
+## Tests
+
+```bash
+python -m pytest
+```
+
+231 tests, environ deux secondes, **sans accès au réseau**. Ils vérifient la
+sauvegarde, la correspondance avec le profil, la cohérence des deux fichiers de
+`data/`, les choix écrits du workflow, et l'encodage des fichiers du dépôt.
+
+Aucun test ne dépend d'une page vivante. Ce qui dépend d'un site est vérifié à
+la main et écrit dans `docs/SOURCES.md` : un test qui dépend d'un site étranger
+échoue pour une raison qui n'a rien à voir avec le code.
+
+Ils sont exécutés par GitHub Actions **avant** chaque collecte. Une veille qui
+écrit des données fausses ne se voit pas ; une veille arrêtée, si. Le runner
+signale l'échec, donc l'arrêt reste visible.
+
+Mettre les tests dans le dépôt a immédiatement produit un défaut que la
+relecture n'avait pas vu : une bourse qui écrit « Open to international
+students » était comptée comme réservée aux nationaux, parce que « national
+student » en est une sous-chaîne. Elle perdait ses 25 points et était écartée.
+Les trois bourses de KAIST y échappaient par chance, la page écrivant
+« applicants ». Le détail est dans `docs/VERSIONS.md` V0.3 et V0.4.
 
 ## Utilisation
 

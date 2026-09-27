@@ -2,17 +2,43 @@ name: Academic Watch
 
 on:
   schedule:
+    # 07:00 UTC chaque jour. Les délais de candidature des universités
+    # européennes tombent le plus souvent en fin de journée, donc en après-midi
+    # en Europe : une collecte le matin laisse le temps de la lire le jour même.
     - cron: "0 7 * * *"
 
   workflow_dispatch:
+
+# Deux exécutions ne doivent pas se marcher dessus. La seconde attend la fin de
+# la première au lieu de l'annuler : une exécution annulée en cours de route
+# laisserait les données à moitié écrites sur la branche.
+concurrency:
+  group: veille
+  cancel-in-progress: false
 
 jobs:
   veille:
     runs-on: ubuntu-latest
 
+    # Le run a besoin d'écrire dans le dépôt, sans quoi le commit des données
+    # échoue. C'est une permission réelle, et elle n'est demandée qu'ici, pour ce
+    # seul job.
+    #
+    # Ce qu'elle implique : le code du dépôt s'exécute avec le droit de pousser.
+    # C'est un choix de confiance, pas une commodité. Il tient au fait que le
+    # dépôt n'a qu'un auteur et qu'il lance son propre code ; le jour où quelqu'un
+    # d'autre y contribue, cette permission mérite d'être réexaminée.
+    permissions:
+      contents: write
+
     steps:
+      # Historique complet. La profondeur par défaut est de 1, et `git pull
+      # --rebase` refuse de rebaser sur un dépôt superficiel : le push de
+      # sécurité plus bas échouerait alors sur un motif incompréhensible.
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Installer Python
         uses: actions/setup-python@v5
@@ -22,7 +48,76 @@ jobs:
       - name: Installer les dépendances
         run: |
           pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
+      # Les tests passent avant la veille, et non après. Un test qui échoue est
+      # un arrêt visible ; une veille qui écrit des données fausses ne se voit
+      # pas, elle se découvre dans l'historique trois mois plus tard. C'est un
+      # choix assumé : la veille s'arrête quand le code est cassé. Le runner
+      # signale l'échec par une notification, donc l'arrêt reste visible.
+      - name: Vérifier que le code tient
+        run: python -m pytest -q
+
+      # `pipefail` est indispensable. Sans lui, le code de retour de
+      # `python src/main.py | tee` est celui de `tee`, qui est toujours zéro :
+      # une veille en échec passerait pour une veille réussie, et l'étape
+      # suivante committerait le fichier tel quel.
       - name: Lancer la veille
         run: |
-          python src/main.py
+          set -o pipefail
+          python src/main.py | tee journal.txt
+
+      # L'exécution est sans état : le runner est détruit après le run. Sans ce
+      # commit, data/ reviendrait à son état d'avant l'exécution, et la veille
+      # ne retiendrait rien d'une journée à l'autre.
+      - name: Enregistrer les résultats
+        run: |
+          git add -A data/
+          if git diff --cached --quiet -- data/; then
+            echo "Rien n'a changé dans data/ : aucun commit."
+            exit 0
+          fi
+
+          # Deux précautions pour lire le journal.
+          #
+          # `grep -a` : sans lui, un journal contenant un caractère que grep
+          # prend pour un octet nul passe pour binaire, et `-o` ne rend alors
+          # rien. Le message de commit deviendrait vide, silencieusement.
+          #
+          # Les motifs sont en ASCII. Un motif accentué dépend de la locale du
+          # runner, et une locale non UTF-8 le fait simplement ne rien
+          # trouver. Les motifs retenus sont donc des extraits sans accent, ce
+          # qui suffit à reconnaître les quatre lignes utiles.
+          compte="$(grep -aoE '[0-9]+ nouvelles depuis' journal.txt | head -1 | grep -oE '^[0-9]+' || true)"
+          date="$(date -u +%Y-%m-%d)"
+
+          if [ "$compte" = "1" ]; then
+            sujet="veille du $date : 1 nouvelle"
+          elif [ -n "$compte" ]; then
+            sujet="veille du $date : $compte nouvelles"
+          else
+            sujet="veille du $date"
+          fi
+
+          git config user.name "academic-watch"
+          git config user.email "academic-watch@users.noreply.github.com"
+          git commit -m "$sujet" -m "$(grep -aE 'correspondent au profil|nouvelles depuis|dans data/' journal.txt || true)"
+
+          # Filet de sécurité : si quelqu'un a poussé entre le checkout et
+          # maintenant, le push direct est refusé. Rebaser plutôt que forcer,
+          # pour ne jamais écraser un commit humain.
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      # Le résultat de la veille doit se lire dans le navigateur, pas dans un
+      # journal de quatre cents lignes. Le résumé d'étape est affiché en tête de
+      # run, c'est-à-dire à l'endroit que l'on regarde en premier.
+      - name: Résumé de la veille
+        if: always()
+        run: |
+          {
+            echo "## Academic Watch"
+            echo
+            grep -aE 'correspondent au profil|nouvelles depuis|dans data/' journal.txt \
+              || echo "La veille n'a rien produit."
+          } >> "$GITHUB_STEP_SUMMARY"

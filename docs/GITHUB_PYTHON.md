@@ -117,6 +117,22 @@ jobs:
         run: python src/main.py
 ```
 
+**Cette structure minimale ne suffit plus.** Elle était correcte au moment où
+elle a été écrite, et elle est devenue fausse : il lui manque l'étape qui
+enregistre les résultats.
+
+Un runner GitHub Actions est une machine jetable, détruite à la fin de
+l'exécution. Ce workflow écrit 69 fiches dans `data/`, puis la machine disparaît
+avec. La veille fonctionnerait en local et perdrait toute mémoire dès le
+premier run automatique. C'est le défaut que le workflow réel corrige, avec
+l'étape `Enregistrer les résultats`, la permission `contents: write`, et
+`fetch-depth: 0` sans lequel le rebase de sécurité échoue.
+
+Le workflow à utiliser est `.github/workflows/veille.yml`, et le détail de chaque
+choix est dans `docs/VERSIONS.md` V0.8. `tests/test_workflow.py` en vérifie les
+invariants, parce que ce fichier est le seul du projet qui ne peut pas être
+lancé chez soi.
+
 ---
 
 # 6. Exécution manuelle

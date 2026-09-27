@@ -203,6 +203,23 @@ Résultat mesuré sur les 3 bourses KAIST : 2 retenues à 100/100, et la bourse
 avec la raison « réservée à un niveau doctoral ». C'est le bon résultat : un
 étudiant de Master ne peut pas en profiter.
 
+## Le piège de « international students »
+
+Le même raisonnement que pour « undergraduate » s'est reproduit sur un autre
+mot, et dans l'autre sens. Une bourse qui écrit « Open to international
+students » contient, comme sous-chaîne, « national student ». Cherchée à la
+sous-chaîne, la restriction nationale était donc trouvée, la bourse perdait ses
+25 points, et elle était écartée comme réservée aux nationaux.
+
+C'est le critère `international`, celui qui décide si l'étudiant ivoirien peut
+en profiter, qui était le plus fragile des quatre : une erreur le fait manquer
+plutôt que de laisser passer à tort une bourse qui ne lui est pas destinée. Les
+trois bourses de KAIST y échappaient par chance, la page écrivant
+« applicants ».
+
+La correction et sa non-régression sont décrites au chapitre V0.4, qui les a
+trouvées. Elle ne change rien aux 69 opportunités réelles.
+
 ## Résultat attendu
 
 Le programme doit séparer :
@@ -339,22 +356,91 @@ qu'on ne peut pas lire sans outillage ne sert à rien à la relecture.
 
 ## Vérification
 
-45 cas de test, tous passants. Ils couvrent le cas nominal et surtout ce qui
-brise une sauvegarde : fichier tronqué, JSON valide mais pas une liste,
-`seen.json` au mauvais format, première exécution, dossier absent, opportunité
-qui change de diplôme, titre accentué ou non, deux sources de même titre, et
-deux collectes identiques dont le fichier doit rester identique.
+**231 tests**, tous passants, dans `tests/`, lancés par `python -m pytest`. Ils
+couvrent le cas nominal et surtout ce qui brise une sauvegarde : fichier tronqué,
+JSON valide mais pas une liste, `seen.json` au mauvais format, première
+exécution, dossier absent, opportunité qui change de diplôme, titre accentué ou
+non, deux sources de même titre, et deux collectes identiques dont le fichier
+doit rester identique.
 
 Sur les données réelles : 69 fiches après la première exécution, 69 nouvelles
 annoncées, puis 0 nouvelle et 69 fiches à la seconde. Le programme est
 idempotent.
 
-## Réserve
+## Ce que les tests ont trouvé
 
-Ces tests vivent dans un dossier temporaire, hors du dépôt. Ils ont servi à
-construire la version et ils sont reproductibles, mais ils ne sont pas exécutés
-automatiquement : rien ne les rejoue à chaque commit. Les mettre dans le dépôt
-est un travail à faire, et il n'est pas fait.
+Écrire les tests dans le dépôt a immédiatement produit un défaut que la relecture
+n'avait pas vu.
+
+**Une bourse entièrement ouverte était comptée comme réservée aux nationaux.**
+`mesure_international` cherchait « national student » par sous-chaîne, et
+« international students » contient « national student ». La formule la plus
+courante du monde était donc confondue avec son contraire, la bourse perdait ses
+25 points, et elle était écartée alors qu'elle est ouverte à tout le monde.
+
+Les trois bourses de KAIST y échappaient **par chance** : la page écrit
+« Open to international applicants », et « applicants » ne contient pas
+« national student ». Le défaut était donc latent, invisible sur les données
+réelles, et il aurait mordu au premier site écrivant « students ». La recherche
+se fait maintenant par mot entier, comme pour les niveaux de diplôme.
+
+Le test de non-régression et son contre-test sont dans
+`tests/test_correspondance.py`. La correction ne change rien aux 69 opportunités
+réelles : vérifié par empreinte SHA-256 de `data/`, identique avant et après.
+
+**Un type sans budget était annoncé avec le budget d'un autre.** Le registre
+déclare `eligibility` pour « KAIST – Eligibility Requirements », un type qui
+n'a pas de budget. La page était notée comme un programme, mais affichée avec le
+libellé « eligibility » : un score de 100 maximum et un nom de type qui ne
+correspondent pas. `evaluer` renvoie maintenant le type dont le budget a
+réellement été appliqué. Le type d'origine reste sur l'opportunité et dans la
+fiche sauvegardée, rien n'est perdu.
+
+**`mesure_niveau` avait un repli non documenté.** Elle lisait le diplôme et le
+titre en plus de l'éligibilité, sans le dire. C'est désormais écrit dans le
+module, avec la même justification que `mesure_diplome` : un diplôme publié est
+une information, pas une devinette.
+
+## Les tests sont dans le dépôt
+
+`pytest.ini` déclare `pythonpath = src` et `testpaths = tests`. La première
+option évite d'ajouter `sys.path` dans chaque fichier de test, la seconde évite
+que pytest aille chercher des tests dans `venv/`. Les dépendances sont dans
+`requirements-dev.txt`, **pas** dans `requirements.txt` : le programme n'a pas
+besoin de pytest pour fonctionner.
+
+Un `conftest.py` existe malgré tout, pour une seule chose : rediriger les chemins
+d'écriture de `storage` vers un dossier temporaire, pour tous les tests sans
+exception. Un test qui écrirait dans le vrai `data/` détruirait l'historique du
+dépôt, et cela ne se verrait qu'après un commit.
+
+Cinq fichiers, chacun avec une raison d'être :
+
+| Fichier | Ce qu'il surveille |
+| ------- | ------------------ |
+| `test_storage.py` | la sauvegarde, l'identité, le refus d'un fichier illisible |
+| `test_correspondance.py` | les paliers, le diplôme, les bourses, les contrats du module |
+| `test_donnees.py` | la cohérence des deux fichiers versionnés |
+| `test_workflow.py` | les choix écrits du workflow, le seul fichier non lançable ici |
+| `test_proprete.py` | l'encodage et les caractères glissés dans les fichiers |
+
+Aucun test ne touche au réseau. Ce qui dépend d'une page vivante est vérifié à
+la main et écrit dans `docs/SOURCES.md` : un test qui dépend d'un site étranger
+échoue pour une raison qui n'a rien à voir avec le code.
+
+`tests/test_donnees.py` porte sur les vraies données, et il les relit sans les
+modifier. `tests/test_proprete.py` mérite une explication, parce qu'elle est
+contre intuitive. Un test de propreté qui échoue oblige à reformater des
+fichiers qu'on n'a pas choisi de reformater, et `config/profile.json` est le
+travail de l'étudiant : lui imposer une largeur de colonne serait disposer de
+son travail. Le fichier ne contient donc que des défauts qui cassent quelque
+chose, tous déjà satisfaits par le dépôt. C'est ce qui le rend utilisable comme
+garde-fou plutôt que comme prétexte.
+
+Les tests sont exécutés par le workflow avant chaque collecte. C'est un choix
+assumé : la veille s'arrête quand le code est cassé, plutôt que d'écrire des
+données fausses. Le runner signale l'échec par une notification, donc l'arrêt
+reste visible.
 
 ---
 
@@ -461,6 +547,53 @@ GitHub Actions doit :
 5. sauvegarder les résultats si nécessaire.
 
 Le programme doit pouvoir fonctionner sans intervention humaine.
+
+## État mesuré
+
+Le workflow est écrit et vérifié, mais **il n'a jamais été exécuté sur
+GitHub**. C'est la seule étape du projet qui ne peut pas être validée en local.
+Il sera connu pour vrai au premier run, et il faudra l'activer ou
+attendre 07:00 UTC.
+
+Les cinq points sont là. Le cinquième est celui qui manquait, et il n'était pas
+évident : **sans commit, `data/` se perd à chaque exécution.** Un runner GitHub
+Actions est une machine jetable, détruite à la fin du run. Le programme écrivait
+69 fiches correctes, et la machine disparaissait avec. La veille aurait
+fonctionné en local et perdu toute mémoire dès le premier run automatique.
+
+C'est aussi pour cela que `data/` est versionné, décision de la V0.4 : il n'y a
+rien à sauvegarder si le résultat ne reste pas dans le dépôt.
+
+| Choix | Raison |
+| ----- | ------ |
+| `permissions: contents: write` au niveau du job | sans lui, `git push` échoue et la veille est perdue chaque jour |
+| `fetch-depth: 0` | `git pull --rebase` refuse un dépôt superficiel, et 1 est la profondeur par défaut |
+| `concurrency` avec `cancel-in-progress: false` | deux runs ne doivent pas se marcher dessus, et un run annulé laisserait les données à moitié écrites |
+| `set -o pipefail` | sans lui, le code de retour de `main.py \| tee` est celui de `tee`, toujours zéro : une veille en échec passerait pour un succès |
+| `git diff --cached --quiet` avant de committer | une journée sans nouveauté ne produit aucun commit, grâce à `storage.a_change` |
+| `git pull --rebase` avant le push | si quelqu'un a poussé entre-temps, on rebase au lieu d'écraser un commit humain |
+| motifs de `grep` en ASCII | un motif accentué dépend de la locale du runner, et le message de commit deviendrait vide sans erreur |
+| résumé d'étape, avec `if: always()` | le résultat se lit dans le navigateur, et le résumé existe précisément quand la veille a échoué |
+| les tests **avant** la veille | une veille qui écrit des données fausses ne se voit pas ; une veille arrêtée, si |
+
+Le message de commit est relu depuis le journal :
+
+```text
+veille du 2026-09-27 : 3 nouvelles
+
+69 opportunités trouvées, 9 correspondent au profil
+69 opportunités enregistrées dans data/opportunities.json
+0 nouvelles depuis la dernière exécution
+9 opportunités déjà montées, dans data/seen.json
+```
+
+Le bloc de commit a été testé pour de vrai, dans un dépôt jetable avec un
+`origin` local : pas de commit quand `data/` ne bouge pas, commit et push
+quand il bouge, et message correct pour 0, 1 et plusieurs nouveautés.
+
+`tests/test_workflow.py` relit le YAML et vérifie ces choix, parce que ce
+fichier est le seul du projet que l'on ne peut pas lancer chez soi. Une faute
+dedans ne se verrait qu'à 07:00 UTC, dans le navigateur, sans personne devant.
 
 ---
 
