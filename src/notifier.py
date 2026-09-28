@@ -101,14 +101,54 @@ class Bulletin(NamedTuple):
 # 1. Le texte
 
 
-def _compte(nombre, singulier, pluriel=None):
+def compte(nombre, singulier, pluriel=None):
     """« 1 nouvelle », « 2 nouvelles », « 2 mises à jour ».
 
     Le pluriel est passé quand il n'est pas le singulier plus un « s », parce
     que « mise à jour » s'accorde sur deux mots.
+
+    La fonction est publique et non underscore parce que `main.display_sources`
+    écrit aussi un compte en français, et qu'un accord calculé à deux endroits
+    finit par diverger : l'un dit « 1 opportunité extraite » et l'autre
+    « 1 opportunités extraites », et rien ne dit lequel des deux est le bon.
+    Un accord se calculant en un seul endroit ne peut pas diverger.
     """
     pluriel = pluriel or singulier + "s"
     return f"{nombre} {singulier if nombre == 1 else pluriel}"
+
+
+def _alertes_sources(sources):
+    """Les lignes d'avertissement sur les sources qui n'ont rien donné.
+
+    **Aucune ligne quand tout va bien**, et c'est le choix qui compte. Le
+    bulletin est lu tous les jours : une ligne qui répète ce que la veille
+    fonctionnait normalement la veille passée est du bruit, et c'est le bruit
+    que la V0.5 a passé sa version à supprimer. Le compte complet par source est
+    écrit dans le journal, que le workflow recopie dans son résumé d'étape — la
+    ligne d'avertissement est un coup de sémaphore, le journal est le dossier.
+
+    La source est nommée, jamais simplement « une source » : l'étudiant ne peut
+    pas réparer une page qu'il ne connaît pas. Et la raison est entre
+    parenthèses, parce que « n'a rien produit » se répare différemment selon
+    qu'il s'agit d'un site hors service ou d'un site qui a changé de HTML.
+
+    Les sources activées sans sélecteurs ne sont pas citées. Elles ne sont pas
+    une panne : ce sont des sources inscrites au cahier des charges et pas
+    encore lues, et les annoncer tous les jours ferait crier au problème ce
+    qui est un état normal.
+    """
+    lignes = []
+    for source in sources:
+        if not source.silencieuse:
+            continue
+        raison = source.erreur or "aucun bloc trouvé"
+        lignes.append(f"Attention : {source.nom} n'a rien produit ({raison}).")
+
+    if lignes:
+        # La ligne vide, pour la même raison qu'après la dernière fiche : sans
+        # elle le « === À signaler === » colle à l'avertissement.
+        lignes.append("")
+    return lignes
 
 
 def _fiche(opportunity, resultat, etiquette, numero):
@@ -141,12 +181,17 @@ def _fiche(opportunity, resultat, etiquette, numero):
     return lignes
 
 
-def rendre(a_signaler, retenues, total, quand=None):
+def rendre(a_signaler, retenues, total, sources=(), quand=None):
     """Le bulletin du jour : le compte de ce qui a été trouvé, et le signal.
 
     `a_signaler` vient de la V0.5 et n'est jamais recalculé ici. `retenues` et
     `total` ne servent qu'à la ligne de compte et au cas « rien de nouveau »,
     où il faut savoir de combien d'opportunités on parle.
+
+    `sources` vient de la V0.7 : la liste des `SourceLue` que la collecte a
+    rendues. Il n'est pas obligatoire, et il ne produit une ligne que si une
+    source n'a rien donné. Voir `_alertes_sources` pour pourquoi le silence
+    est le cas normal.
     """
     quand = quand or datetime.now(timezone.utc)
     nouvelles = sum(1 for _, _, etiquette in a_signaler if etiquette == NOUVELLE)
@@ -158,8 +203,11 @@ def rendre(a_signaler, retenues, total, quand=None):
         "=== Opportunités trouvées ===",
         f"{total} opportunités trouvées, {retenues} correspondent au profil",
         "",
-        "=== À signaler ===",
     ]
+
+    lignes.extend(_alertes_sources(sources))
+
+    lignes.append("=== À signaler ===")
 
     if not a_signaler:
         lignes.append(
@@ -173,9 +221,9 @@ def rendre(a_signaler, retenues, total, quand=None):
     else:
         details = []
         if nouvelles:
-            details.append(_compte(nouvelles, "nouvelle"))
+            details.append(compte(nouvelles, "nouvelle"))
         if mises_a_jour:
-            details.append(_compte(mises_a_jour, "mise à jour", "mises à jour"))
+            details.append(compte(mises_a_jour, "mise à jour", "mises à jour"))
         lignes.append(f"{len(a_signaler)} à signaler : {', '.join(details)}")
         lignes.append("")
         for numero, (opportunity, resultat, etiquette) in enumerate(a_signaler, start=1):
@@ -217,9 +265,9 @@ def sujet(bulletin):
         return f"Academic Watch {date} : rien de nouveau"
     details = []
     if bulletin.nouvelles:
-        details.append(_compte(bulletin.nouvelles, "nouvelle"))
+        details.append(compte(bulletin.nouvelles, "nouvelle"))
     if bulletin.mises_a_jour:
-        details.append(_compte(bulletin.mises_a_jour, "mise à jour", "mises à jour"))
+        details.append(compte(bulletin.mises_a_jour, "mise à jour", "mises à jour"))
     return f"Academic Watch {date} : {', '.join(details)}"
 
 
@@ -257,7 +305,7 @@ def envoyer(msg, valeurs, transport=smtplib.SMTP):
     objet qui note les appels, et aucun d'eux n'ouvre une connexion. Passer le
     faux serveur en argument plutôt que remplacer `smtplib.SMTP` évite de
     modifier un module de la bibliothèque standard pour toute la session de
-    tests, y compris pour les tests qui ne speak pas de messagerie.
+    tests, y compris pour les tests qui n'ont rien à voir avec la messagerie.
     """
     with transport(
         valeurs["SMTP_HOST"], int(valeurs["SMTP_PORT"]), timeout=DELAI_SECONDES

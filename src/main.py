@@ -4,6 +4,7 @@ Orchestration (docs/VERSIONS.md) :
 
     V0.1  chargement de la configuration   -> display_profile()
     V0.2  collecte des sources             -> collect_opportunities()
+    V0.7  ce que chaque source a donné     -> display_sources()
     V0.3  correspondance avec le profil    -> matches.py   (evaluer)
     V0.4  sauvegarde                       -> storage.py   (sauvegarder)
     V0.5  détection des nouveautés         -> storage.py, main.py
@@ -17,7 +18,7 @@ import json
 from pathlib import Path
 
 from matches import evaluer
-from notifier import MISE_A_JOUR, NOUVELLE, publier, rendre
+from notifier import MISE_A_JOUR, NOUVELLE, compte, publier, rendre
 from scraper import collect_opportunities
 from storage import (
     charger_vus,
@@ -60,15 +61,72 @@ def display_profile(profile):
         display_values(values)
 
 
+def display_sources(recolte):
+    """Affiche ce que chaque source a donné pendant la collecte.
+
+    Cinq lignes de plus par jour, et c'est le prix à payer pour que la panne ne
+    soit pas silencieuse. Sur les 19 sources du registre, 4 sont lues ; avant
+    cette section, le journal ne disait rien des 15 autres, et « 69
+    opportunités enregistrées » se lisait exactement pareil selon que les
+    quatre marchaient ou qu'aucune ne marchait plus.
+
+    Un compte de zéro est écrit tel quel, jamais remplacé par un tiret et
+    jamais par « aucune ». Zéro est une mesure, et c'est la seule qui distingue
+    une source qui a répondu sans contenu d'une source qui n'a pas répondu.
+    Les deux se réparent dans deux fichiers différents.
+
+    Les sources activées sans sélecteurs ne sont pas nommées une par une. Il
+    y en a 12, elles ne changent pas d'une journée à l'autre, et douze lignes
+    tous les jours seraient le bruit que la V0.5 a supprimé. Elles sont
+    comptées, ce qui suffit à savoir que la veille ne lit pas tout le
+    registre — et `docs/SOURCES.md` §8 dit lesquelles.
+
+    Le préfixe « Source » est en ASCII et il est unique dans le journal : le
+    workflow s'en sert comme motif pour recopier ces lignes dans son résumé
+    d'étape, et un motif accentué ne trouverait rien sur un runner réglé dans
+    une locale qui n'est pas UTF-8.
+    """
+    for source in recolte.sources:
+        if source.silencieuse and source.erreur:
+            motif = f"lecture impossible ({source.erreur})"
+        elif source.silencieuse:
+            motif = "aucun bloc trouvé"
+        else:
+            motif = compte(
+                source.nombre, "opportunité extraite", "opportunités extraites"
+            )
+        print(f"Source {source.nom} : {motif}")
+        if source.detail:
+            # Le message complet, indenté, juste sous la source qu'il explique.
+            # L'indentation n'est pas cosmétique : c'est elle qui empêche le
+            # détail d'être attrapé par le motif `^Source` du workflow, qui doit
+            # ne voir que les lignes de rapport, une par source.
+            print(f"   {source.erreur} : {source.detail}")
+
+    if recolte.sans_selecteurs:
+        print(
+            f"Sources sans sélecteurs : {recolte.sans_selecteurs} activées et non lues, "
+            "voir docs/SOURCES.md §8."
+        )
+
+
 def main():
     """Enchaîne les étapes dans l'ordre défini par docs/VERSIONS.md."""
     profile = load_profile()
     display_profile(profile)
 
+    # V0.7. La collecte est terminée avant que la correspondance commence, donc
+    # le rapport par source peut être écrit tout de suite : il décrit la
+    # matière première, et il se lit avant les résultats qu'elle a produits.
+    # L'afficher plus tard obligerait à le garder en mémoire pour le copier
+    # juste avant l'écran, sans rien apprendre de plus.
+    collecte = collect_opportunities()
+    display_sources(collecte)
+
     # La correspondance est faite ici, et non dans le scraper : comparer au
     # profil n'est pas extraire une page. Les deux étapes restent séparées.
     paires = []
-    for opportunity in collect_opportunities():
+    for opportunity in collecte.opportunities:
         resultat = evaluer(opportunity, profile)
         # L'évaluation est recopiée sur l'opportunité, comme le prévoyait
         # models.py, pour que la sauvegarde n'ait pas à la refaire.
@@ -107,14 +165,15 @@ def main():
 
     # V0.6. Le bulletin est rendu une fois et publié par tous les moyens
     # disponibles : la console toujours, l'email si les six variables
-    # d'environnement sont là.
+    # d'environnement sont là. Les sources y passent aussi, pour la seule
+    # alerte : une ligne, et seulement si une source n'a rien donné.
     #
     # L'ordre est délibéré. Publier avant `conserver_vus` signifie qu'un run qui
     # s'arrête entre les deux enverra le même message au run suivant, donc un
     # doublon. L'autre ordre perdrait l'opportunité sans qu'aucune trace
     # reste : elle serait déjà marquée comme vue, et plus personne ne
     # l'annoncerait. Le doublon se voit et se corrige, la perte ne se voit pas.
-    publier(rendre(a_signaler, len(retenues), len(paires)))
+    publier(rendre(a_signaler, len(retenues), len(paires), collecte.sources))
 
     # `vues` n'est mémorisé qu'après l'affichage, pour qu'une opportunité
     # comptée comme montrée l'ait été. C'est ce qui évite de la re-signaler.

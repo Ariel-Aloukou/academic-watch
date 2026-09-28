@@ -146,3 +146,71 @@ def test_le_fichier_est_indente(opportunities):
     brut = (DOSSIER / "opportunities.json").read_text(encoding="utf-8")
     assert "\n  {" in brut
     assert brut.endswith("\n")
+
+
+# 4. Le registre et les règles d'extraction se partagent les sources
+
+
+@pytest.fixture(scope="module")
+def registre():
+    return json.loads((RACINE / "config" / "sources.json").read_text(encoding="utf-8"))["sources"]
+
+
+@pytest.fixture(scope="module")
+def regles():
+    return json.loads((RACINE / "config" / "selectors.json").read_text(encoding="utf-8"))["sources"]
+
+
+def test_chaque_bloc_de_selecteurs_designe_une_source_inscrite(regles, registre):
+    # Un bloc de sélecteurs pour une source retirée du registre est de la
+    # configuration morte : `load_active_sources` l'ignore sans le dire, et
+    # quelqu'un la lira dans `config/selectors.json` en croyant qu'elle est
+    # active.
+    inscrits = {source["name"] for source in registre}
+    for bloc in regles:
+        assert bloc["name"] in inscrits, bloc["name"]
+
+
+def test_les_noms_ne_sont_pas_repetes_dans_un_meme_fichier(registre, regles):
+    # Un nom répété dans le registre est un bug silencieux :
+    # `load_active_sources` construit un dictionnaire par nom, donc la première
+    # source lue écrase la seconde, et le rapport de la V0.7 ne nommerait qu'une
+    # des deux. Les tests `test_donnees.py` existants attraperaient d'ailleurs
+    # la fiche orpheline, mais le registre resterait incohérent.
+    #
+    # Le même nom dans les deux fichiers n'est pas une répétition : c'est la
+    # jointure. Les 4 sources lues sont dans les deux par construction, et
+    # c'est ce que `load_active_sources` exploite. Comparer les deux listes
+    # ensemble ferait échouer ce test sur un fonctionnement correct — c'est ce
+    # qu'il a fait avant d'être corrigé.
+    for intitules in ([s["name"] for s in registre], [b["name"] for b in regles]):
+        assert len(intitules) == len(set(intitules)), intitules
+
+
+def test_une_source_desactivee_n_est_jamais_lue(registre, regles):
+    # Écrire les sélecteurs avant d'activer la source est un ordre de travail
+    # légitime, et c'est même le plus sûr. Le registre doit donc pouvoir contenir
+    # une source désactivée qui a des sélecteurs ; ce qui ne doit jamais
+    # arriver, c'est l'inverse, une source lue alors qu'elle est désactivée.
+    desactivees = {s["name"] for s in registre if not s.get("enabled")}
+    activees = {s["name"] for s in registre if s.get("enabled")}
+    for bloc in regles:
+        assert bloc["name"] in activees, bloc["name"]
+    assert desactivees.isdisjoint({b["name"] for b in regles})
+
+
+def test_les_sources_lues_et_comptees_se_partagent_les_activees(registre, regles):
+    # La propriété dont dépend la ligne du journal. Les sources lues et les
+    # sources comptées comme « sans sélecteurs » doivent se partager
+    # exactement les sources activées : pas de source dans les deux, pas de
+    # source dans aucune.
+    activees = {s["name"] for s in registre if s.get("enabled")}
+    lues = {bloc["name"] for bloc in regles}
+    comptees = activees - lues
+    assert lues.isdisjoint(comptees)
+    assert lues | comptees == activees
+    assert lues <= activees
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

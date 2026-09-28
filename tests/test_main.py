@@ -15,6 +15,17 @@ Publier avant de mémoriser une opportunité comme vue est ce qui empêche qu'un
 se perde quand l'envoi échoue ; l'inverse empêcherait qu'une soit annoncée deux
 fois. Aucune des deux propriétés ne se voit dans la sortie, donc il faut les
 regarder ailleurs.
+
+La V0.7 a ajouté une troisième chose à regarder : le rapport par source, que
+`main` écrit entre le profil et le bulletin. Sa position n'est pas un détail
+d'écriture, parce que le workflow extrait la section « À signaler » avec un
+`sed` dont les deux ancres sont fixes : une section glissée entre les deux
+ferait que le résumé d'étape recopierait le mauvais bloc, sans erreur.
+
+`collect_opportunities` est simulée comme avant, mais elle rend maintenant une
+`Recolte` et non une liste. C'est le contrat de la V0.7, et il est testé pour
+lui-même dans `tests/test_scraper.py` ; ici, seule la façon dont `main` s'en
+sert compte.
 """
 
 import pytest
@@ -22,6 +33,7 @@ import pytest
 import main
 import storage
 from models import Opportunity
+from scraper import Recolte, SourceLue
 
 
 def opportunite(titre, diplome="Master of Science"):
@@ -63,13 +75,18 @@ def evaluation(resultats):
     return evaluer
 
 
-def lancer(monkeypatch, resultats, *opportunites):
+def lancer(monkeypatch, resultats, *opportunites, sources=(), sans_selecteurs=0):
     """Lance `main()` sur une collecte simulée, et rend l'ordre des étapes.
 
     Chaque étape est enregistrée avec ce qu'elle a reçu, donc un test peut lire
     le bulletin tel que `main` l'a construit. `publier` se contente d'imprimer
     le texte qu'il reçoit : c'est la part de `main`, et l'email est testé dans
     `tests/test_notifier.py`.
+
+    `sources` décrit ce que la collecte a donné source par source. Aucun test
+    n'est écrit avec un registre vide : une section qui ne s'affiche qu'avec
+    une source muette ne prouve rien le jour où aucune ne l'est, qui est le cas
+    le plus fréquent.
     """
     etapes = []
     vrai_sauvegarder = main.sauvegarder
@@ -86,7 +103,8 @@ def lancer(monkeypatch, resultats, *opportunites):
         etapes.append(("memoire", retenues))
         return []
 
-    monkeypatch.setattr(main, "collect_opportunities", lambda: list(opportunites))
+    recolte = Recolte(list(opportunites), list(sources), sans_selecteurs)
+    monkeypatch.setattr(main, "collect_opportunities", lambda: recolte)
     monkeypatch.setattr(main, "evaluer", evaluation(resultats))
     monkeypatch.setattr(main, "sauvegarder", sauvegarder)
     monkeypatch.setattr(main, "publier", publier)
@@ -192,6 +210,171 @@ def test_les_retenues_memorisees_sont_les_retenues_signalees(monkeypatch):
     assert [o.title for o in memoire] == ["Master A"]
 
 
+# La décision de la V0.7 : le journal nomme ses sources.
+
+
+def test_le_journal_nomme_chaque_source_avec_son_compte(monkeypatch, capsys):
+    # La ligne qui manquait au projet. Avant, le journal disait « 69
+    # opportunités enregistrées » sans nommer une seule source, donc il était
+    # impossible de distinguer une veille qui marche d'une veille dont les
+    # sources sont tombées : les deux écrivaient la même ligne. C'est mesuré,
+    # le 27 septembre 2026 : zéro ligne du journal ne nommait une source.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 3), SourceLue("Beta", 36)],
+    )
+    sortie = capsys.readouterr().out
+    assert "Source Alpha : 3 opportunités extraites\n" in sortie
+    assert "Source Beta : 36 opportunités extraites\n" in sortie
+
+
+def test_une_source_sans_rien_est_ecrite_avec_son_zero(monkeypatch, capsys):
+    # Zéro est écrit comme un zéro. Un tiret, ou un « aucune », dirait que le
+    # programme n'a rien cherché, alors qu'il a cherché et n'a rien trouvé.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 0)],
+    )
+    assert "Source Alpha : aucun bloc trouvé" in capsys.readouterr().out
+
+
+def test_une_erreur_de_lecture_nomme_son_type(monkeypatch, capsys):
+    # La source a échoué, ou n'a pas répondu : les deux se réparent
+    # différemment, donc le journal doit dire laquelle. Le type de l'exception
+    # est ce qui le permet, et il vient du rapport sans être recalculé.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 0, "ConnectionError")],
+    )
+    sortie = capsys.readouterr().out
+    assert "Source Alpha : lecture impossible (ConnectionError)" in sortie
+    assert "aucun bloc trouvé" not in sortie
+
+
+def test_une_seule_opportunite_est_accordee_au_singulier(monkeypatch, capsys):
+    # `compte` est la fonction d'accord de `notifier`, partagée pour qu'il n'y
+    # ait pas deux règles. Le test vérifie le partage autant que l'accord.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 1)],
+    )
+    sortie = capsys.readouterr().out
+    # L'assertion porte la ligne entiere, retour a la ligne compris. Sans
+    # lui, « 1 opportunité extraites » la passerait : « extraite » est un
+    # préfixe de « extraites », donc un `in` sur un bout de ligne accepte le
+    # pluriel. Le test passait donc sur le cas même qu'il devait couvrir.
+    assert "Source Alpha : 1 opportunité extraite\n" in sortie
+    assert "Source Alpha : 1 opportunité extraites" not in sortie
+
+
+def test_le_message_complet_est_ecrit_sous_sa_source(monkeypatch, capsys):
+    # Le rapport porte le type, sur la ligne de la source ; le message complet
+    # est sur la ligne d'après, indenté. C'est ce que permet à `tests/
+    # test_workflow.py` d'affirmer qu'une panne apparaît une fois dans le résumé
+    # d'étape et que son détail n'y apparaît pas.
+    #
+    # L'indentation est vérifiée caractère par caractère : trois espaces, pas
+    # quatre, pas une tabulation. Une tabulation passerait un `in` et casserait
+    # l'alignement du journal.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 0, "ConnectionError", "hôte exemple.test")],
+    )
+    sortie = capsys.readouterr().out
+    lignes = sortie.split("\n")
+    assert (
+        "Source Alpha : lecture impossible (ConnectionError)\n"
+        "   ConnectionError : hôte exemple.test\n" in sortie
+    ), sortie
+    # Une seule ligne commence par « Source », et elle est suivie du détail.
+    assert [l for l in lignes if l.startswith("Source")] == [
+        "Source Alpha : lecture impossible (ConnectionError)"
+    ]
+
+
+def test_les_sources_activatees_sans_selecteurs_sont_comptees(monkeypatch, capsys):
+    # Sur le registre réel, 12 sources sont activées sans bloc de sélecteurs.
+    # Ce n'est pas une panne, mais sans la ligne elles seraient invisibles, et la
+    # veille semblerait lire tout le registre alors qu'elle en lit 4 sur 19.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 1)],
+        sans_selecteurs=12,
+    )
+    assert (
+        "Sources sans sélecteurs : 12 activées et non lues"
+        in capsys.readouterr().out
+    )
+
+
+def test_aucune_ligne_sans_selecteurs_quand_tout_est_lu(monkeypatch, capsys):
+    # Le cas le plus fréquent : une veille normale n'ajoute pas de ligne au
+    # journal. C'est la même règle que pour un champ absent dans une fiche.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 1)],
+        sans_selecteurs=0,
+    )
+    sortie = capsys.readouterr().out
+    assert "Sources sans sélecteurs" not in sortie
+
+
+def test_le_bulletin_recoit_le_rapport_de_collecte(monkeypatch):
+    # C'est par là que l'étudiant apprend qu'une source est tombée sans ouvrir de
+    # journal. Si `main` ne passait pas les sources à `rendre`, le journal
+    # parlerait de la panne et l'email dirait que tout va bien.
+    etapes = lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 0)],
+    )
+    assert "Alpha n'a rien produit" in bulletin_de(etapes).texte
+
+
+def test_le_bulletin_ignore_les_sources_sans_selecteurs(monkeypatch):
+    # Le compte `sans_selecteurs` n'est pas une alerte : ce sont des sources
+    # décidées et pas encore lues, donc un état normal. L'écrire tous les jours
+    # dans l'email ferait crier au problème ce qui est normal.
+    etapes = lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 1)],
+        sans_selecteurs=12,
+    )
+    assert "sans sélecteurs" not in bulletin_de(etapes).texte
+
+
+def test_le_rapport_par_source_hors_de_la_section_extraite(monkeypatch, capsys):
+    # Le workflow copie la section « À signaler » avec un `sed` qui va de
+    # `signaler ===` à `Sauvegarde ===`. Une section entre les deux ancres se
+    # retrouverait dans le résumé d'étape, et le résumé afficherait des lignes
+    # qui ne sont pas des résultats.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 1)],
+    )
+    sortie = capsys.readouterr().out
+    assert sortie.index("Source Alpha :") < sortie.index("=== À signaler ===")
+
+
 # Ce que le workflow relit dans le journal.
 
 
@@ -210,10 +393,18 @@ def test_la_section_sauvegarde_reste_affichee(monkeypatch, capsys):
 def test_les_sections_du_journal_restent_dans_l_ordre(monkeypatch, capsys):
     # Le résumé d'étape du workflow extrait la section « À signaler » avec un
     # `sed` qui s'arrête à « Sauvegarde ». Si l'ordre changeait, l'extraction
-    # prendrait le mauvais bloc, silencieusement.
-    lancer(monkeypatch, {"Master A": (70, True)}, opportunite("Master A"))
+    # prendrait le mauvais bloc, silencieusement. Le rapport par source de la
+    # V0.7 est dans la chaîne : il se lit après le profil et avant le bulletin,
+    # parce qu'il décrit la matière première.
+    lancer(
+        monkeypatch,
+        {"Master A": (70, True)},
+        opportunite("Master A"),
+        sources=[SourceLue("Alpha", 1)],
+    )
     sortie = capsys.readouterr().out
-    assert sortie.index("=== Profil de recherche ===") < sortie.index("Academic Watch")
+    assert sortie.index("=== Profil de recherche ===") < sortie.index("Source Alpha :")
+    assert sortie.index("Source Alpha :") < sortie.index("Academic Watch")
     assert sortie.index("Academic Watch") < sortie.index("=== À signaler ===")
     assert sortie.index("=== À signaler ===") < sortie.index("=== Sauvegarde ===")
 

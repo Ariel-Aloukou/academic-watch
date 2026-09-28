@@ -17,6 +17,9 @@ Ce module a deux rôles distincts :
 * extraire les opportunités des sources qui le sont, avec
   collect_opportunities().
 
+Et un troisième rôle, moins visible : dire ce que chaque source a apporté.
+Il est né d'un défaut mesuré, décrit dans `collect_opportunities`.
+
 La correspondance avec le profil arrive en V0.3 (matches.py), la sauvegarde
 en V0.4 (storage.py), voir docs/VERSIONS.md.
 
@@ -34,6 +37,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import urljoin
 
 import requests
@@ -76,6 +80,68 @@ DETAIL_LINK_PATTERN = re.compile(
 )
 
 
+class SourceLue(NamedTuple):
+    """Ce qu'une source a donné pendant une collecte.
+
+    Une source qui répond avec zéro opportunité, une source injoignable et une
+    source dont la lecture a levé une erreur sont trois pannes différentes.
+    Les traiter comme une seule les rendrait indiscernables, et c'est
+    exactement le défaut que ce type corrige : avant lui, une source qui
+    cessait de produire produisait un journal identique à celui d'une veille
+    normale.
+
+    Les deux champs d'erreur ne sont pas redondants, ils ont deux lecteurs :
+
+    * `erreur` est le type de l'exception, « ConnectionError »,
+      « ModuleNotFoundError », « KeyError ». C'est ce qui tient sur une ligne
+      d'email, et c'est ce qui distingue une coupure de réseau d'une faute de
+      configuration : les deux doivent se traiter différemment et sans que
+      l'étudiant ait à ouvrir un journal pour le savoir ;
+    * `detail` est le message complet, que `collect_opportunities` écrit dans
+      le journal au moment où il a encore du sens. Le garder ici obligerait
+      l'email à le porter, et il contient des détails internes — hôte, port,
+      chemin de l'URL — qui n'intéressent pas l'étudiant.
+    """
+
+    nom: str
+    nombre: int
+    erreur: str = ""
+    detail: str = ""
+
+    @property
+    def silencieuse(self):
+        """Dit si la source n'a rien donné.
+
+        La condition est nommée parce qu'elle est utilisée à deux endroits, le
+        journal et le bulletin, et que « nombre == 0 » écrit deux fois
+        finirait par diverger : l'un dirait « lecture impossible » et l'autre
+        « aucun bloc trouvé », et les deux parleraient de la même panne.
+        """
+        return self.nombre == 0
+
+
+class Recolte(NamedTuple):
+    """Le résultat d'une collecte : les fiches, et ce que chaque source a donné.
+
+    `opportunities` reste une liste d'`Opportunity`, exactement comme avant.
+    C'est la propriété que la V0.7 demande : une source de plus produit le
+    même format que les autres, donc rien en aval n'a à savoir qu'elle
+    existe. `sources` est la partie nouvelle, et elle n'est lue par personne
+    en aval non plus — elle sert au journal et au bulletin, donc à l'étudiant.
+
+    `sans_selecteurs` compte les sources activées dans le registre et jamais
+    lues, faute de bloc dans `config/selectors.json`. C'est un état normal et
+    non une panne : une source est inscrite au cahier des charges avant de
+    savoir la lire, c'est la raison d'être des deux fichiers de configuration.
+    Le compter permet de le dire, et de ne pas le confondre avec une source
+    qui ne répond plus.
+    """
+
+    opportunities: list
+    sources: list
+    sans_selecteurs: int = 0
+
+
 def load_sources():
     """Retourne le registre des sources, tel que défini dans le cahier des charges."""
     return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))["sources"]
@@ -86,6 +152,17 @@ def load_parsing_rules():
     return json.loads(PARSING_PATH.read_text(encoding="utf-8"))["sources"]
 
 
+def load_enabled_sources():
+    """Les sources du registre qui sont activées, qu'elles soient lisibles ou non.
+
+    Séparée de `load_active_sources` parce que la V0.7 a besoin de compter les
+    sources activées que la collecte n'a pas lues : sans ce nombre, une source
+    inscrite et jamais implémentée est indiscernable d'une source qui ne répond
+    plus.
+    """
+    return [source for source in load_sources() if source.get("enabled")]
+
+
 def load_active_sources():
     """Croise le registre et les règles d'extraction.
 
@@ -93,12 +170,13 @@ def load_active_sources():
     dispose de sélecteurs. Les sources sans sélecteurs sont donc ignorées sans
     provoquer d'erreur : c'est ce qui permet d'inscrire une source dans le
     cahier des charges avant de savoir la lire.
+
+    L'ordre de la liste est celui de `config/selectors.json`, donc le rapport
+    de collecte est le même d'un jour à l'autre. Un rapport qui changerait
+    d'ordre à chaque exécution serait illisible, et le jour où deux sources
+    portent le même nom de famille, on ne saurait plus laquelle est laquelle.
     """
-    actives = {
-        source["name"]: source
-        for source in load_sources()
-        if source.get("enabled")
-    }
+    actives = {source["name"]: source for source in load_enabled_sources()}
 
     return [
         {**actives[regles["name"]], **regles}
@@ -415,21 +493,65 @@ def scrape_source(source):
 
 
 def collect_opportunities():
-    """Collecte toutes les sources prêtes à être lues.
+    """Collecte toutes les sources prêtes à être lues, et rend ce qu'elles ont donné.
 
     Toutes les sources produisent le même format de données
     (docs/VERSIONS.md V0.7). Ajouter une source revient donc à écrire un bloc
     dans config/selectors.json, sans modifier ce fichier.
+
+    ## Pourquoi la fonction rend une `Recolte` et non une liste
+
+    Une liste ne dit rien de son origine. Sur le run du 27 septembre 2026, le
+    journal disait « 69 opportunités enregistrées » et ne nommait aucune
+    source : il était impossible de distinguer une veille qui marche d'une
+    veille dont la moitié des sources a cessé de répondre, parce que les deux
+    écrivaient la même ligne. Sur les 19 sources du registre, 4 seulement
+    sont lues ; parmi les 15 autres, 12 sont activées et ne produisent rien, et
+    rien ne le disait. C'est le pire mode de panne possible pour une veille :
+    il ne se voit pas dans les données, et il se découvre une saison de
+    bourses plus tard.
+
+    Le compte par source est donc rendu, et il est rendu même quand il vaut
+    zéro. Zéro n'est pas une absence d'information, c'est la mesure qui
+    distingue la panne la plus coûteuse du projet.
+
+    ## Pourquoi toutes les exceptions sont rattrapées
+
+    Une source qui échoue ne doit ni interrompre les autres, ni faire échouer
+    la veille. Avant cette version, seules les erreurs réseau étaient
+    rattrapeées, et une faute de configuration — un nom de `parser` sans
+    module dans `src/parsers/`, un bloc de sélecteurs sans clé `item` — faisait
+    tomber les 68 fiches des trois autres sources avec elle. Le type de
+    l'exception est nommé dans `erreur`, donc une `KeyError` se lit au lieu de
+    se déguiser en coupure de réseau, et les deux se réparent différemment.
     """
+    actives = load_active_sources()
     opportunities = []
-    for source in load_active_sources():
+    sources = []
+
+    for source in actives:
         try:
-            opportunities.extend(scrape_source(source))
-        except requests.RequestException as error:
-            # Une source brièvement indisponible ne doit pas faire échouer la
-            # veille entière ni empêcher les autres sources de répondre.
-            print(f"Source {source['name']} indisponible : {error}")
-    return opportunities
+            trouvees = scrape_source(source)
+        except Exception as erreur:
+            # `Exception` et non `requests.RequestException` : voir le docstring.
+            #
+            # Rien n'est écrit ici. La fonction rend la panne, elle ne la
+            # raconte pas : `main.display_sources` est le seul endroit qui
+            # écrit le rapport. Les deux écrivaient la même panne, et le
+            # journal la disait donc deux fois, dont deux fois dans le résumé
+            # d'étape du workflow puisque le motif y est `^Source`.
+            trouvees = []
+            lue = SourceLue(source["name"], 0, type(erreur).__name__, str(erreur))
+        else:
+            lue = SourceLue(source["name"], len(trouvees))
+        sources.append(lue)
+        opportunities.extend(trouvees)
+
+    return Recolte(
+        opportunities,
+        sources,
+        len(load_enabled_sources()) - len(actives),
+    )
 
 
 if __name__ == "__main__":
