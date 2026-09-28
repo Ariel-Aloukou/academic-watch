@@ -17,7 +17,7 @@ import yaml
 
 import main
 import notifier
-from scraper import Recolte, SourceLue
+from scraper import Recolte, SourceLue, TIMEOUT_SECONDS
 
 CHEMIN = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "veille.yml"
 
@@ -178,6 +178,39 @@ def test_l_historique_complet_est_recupere(etapes):
     # `git pull --rebase` refuse un dépôt superficiel, et la profondeur par
     # défaut de `actions/checkout` est de 1.
     assert etapes["Récupérer le dépôt"]["with"]["fetch-depth"] == 0
+
+
+# Le délai après lequel GitHub abandonne un job. C'est le défaut de la
+# plateforme, recopié ici pour que l'assertion dise pourquoi la valeur du
+# workflow est acceptable, et pas seulement qu'elle existe.
+PLAFORD_PAR_DEFAUT = 360
+
+# Marge exigée entre le plafond du job et le délai d'une seule requête réseau.
+# Vingt fois 30 secondes font 10 minutes : le programme garde de la place pour
+# les requêtes lentes et pour l'installation, tout en restant loin du plafond
+# de la plateforme. La marge est dérivée de TIMEOUT_SECONDS et non écrite en dur,
+# pour que le test suive le code si ce délai change un jour.
+MARGE_SUR_UNE_REQUETE = 20
+
+
+def test_le_job_a_un_plaford_d_execution(job):
+    # Sans plafond, un run bloqué reste en cours pendant les 360 minutes du
+    # défaut de GitHub. Ce job en met dix-sept secondes : un run qui dure des
+    # heures est cassé, et le dire tot évite une nuit d'attente pour rien.
+    plafond = job["timeout-minutes"]
+    # GitHub refuse une valeur décimale, donc le type est aussi une contrainte
+    # de validité du workflow, pas seulement une commodité de test.
+    assert isinstance(plafond, int) and not isinstance(plafond, bool)
+    assert 0 < plafond < PLAFORD_PAR_DEFAUT, plafond
+
+
+def test_le_plaford_ne_tombe_pas_pendant_une_collecte_normale(job):
+    # Le programme est déjà borné requête par requête, donc le plafond du job ne
+    # doit jamais tomber pendant une collecte dont un seul site est lent. La
+    # veille sur les sources actuelles tient en 17,5 secondes, et le pire cas du
+    # réseau reste quelques minutes même si tous les sites répondent mal.
+    plafond = job["timeout-minutes"]
+    assert plafond * 60 > MARGE_SUR_UNE_REQUETE * TIMEOUT_SECONDS
 
 
 # 4. La notification, qui ne se voit pas sans le navigateur

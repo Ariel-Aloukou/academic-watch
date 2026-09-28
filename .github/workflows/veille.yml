@@ -20,6 +20,20 @@ jobs:
   veille:
     runs-on: ubuntu-latest
 
+    # Le plafond d'exécution du job. GitHub en abandonne un après 360 minutes
+    # par défaut, ce qui n'a aucun rapport avec ce que fait ce job : la veille
+    # met 17,5 secondes en local, et chaque requête réseau a son propre délai,
+    # borné par TIMEOUT_SECONDS : quelques minutes même si tous les sites
+    # répondent mal. Trente minutes laisse une marge très large, et un run
+    # bloqué devient rouge dans la matinée au lieu de l'être six heures plus
+    # tard.
+    #
+    # Ce n'est pas un dispositif de protection du planning, et la raison est
+    # écrite ici parce qu'elle est contre-intuitive : avec une cadence de 24
+    # heures, un blocage isolé ne peut pas faire perdre une journée. L'écrire
+    # autrement serait faux. Voir docs/VERSIONS.md V0.9.
+    timeout-minutes: 30
+
     # Le run a besoin d'écrire dans le dépôt, sans quoi le commit des données
     # échoue. C'est une permission réelle, et elle n'est demandée qu'ici, pour ce
     # seul job.
