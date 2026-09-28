@@ -9,12 +9,15 @@ Ils ne vérifient pas la syntaxe, que fait le validateur de GitHub lui-même, ma
 les choix écrits, qui sont ceux qu'on casse par mégarde en éditant le fichier.
 """
 
+import re
 from pathlib import Path
 
 import pytest
 import yaml
 
+import main
 import notifier
+from scraper import Recolte, SourceLue
 
 CHEMIN = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "veille.yml"
 
@@ -222,3 +225,102 @@ def test_le_message_de_commit_reste_en_une_ligne(etapes):
     # l'email allongerait chaque ligne de la page d'accueil du dépôt pour dire
     # la même chose que le résumé d'étape.
     assert "Notification" not in etapes["Enregistrer les résultats"]["run"]
+
+
+# 5. Le rapport par source, dont la seule trace lisible est le résumé d'étape
+
+
+def motif_du_grep(etapes, etape="Résumé de la veille"):
+    """L'alternation du `grep` de l'étape, telle qu'écrite dans le YAML.
+
+    C'est l'alternation qui est lue, et non le texte de l'étape : un
+    commentaire qui mentionne un motif est légitime, et le faire échouer
+    obligerait à supprimer une phrase utile pour satisfaire un test.
+    """
+    ligne = [l for l in etapes[etape]["run"].split("\n") if "grep -aE" in l]
+    assert len(ligne) == 1, f"{etape} doit avoir un seul grep de motifs"
+    return ligne[0].split("'")[1]
+
+
+def test_le_resume_recopie_le_rapport_par_source(etapes):
+    # Sans ce motif, le rapport par source n'apparaît que dans le journal, et le
+    # résumé d'étape afficherait « 69 opportunités trouvées » sans dire d'où
+    # elles viennent. C'est le défaut que la V0.7 corrige, et sa correction doit
+    # se voir à l'endroit que l'étudiant regarde en premier.
+    assert "^Source" in motif_du_grep(etapes)
+
+
+def test_le_motif_du_rapport_est_en_ascii(etapes):
+    # Un motif accentué ne trouve rien sur un runner réglé dans une locale qui
+    # n'est pas UTF-8, et une recherche sans résultat ne se voit pas. Le préfixe
+    # écrit par `main.display_sources` est en ASCII justement pour cela.
+    assert motif_du_grep(etapes).isascii()
+
+
+def test_le_motif_du_rapport_est_ancre(etapes):
+    # Ancré, sinon un titre d'opportunité qui contiendrait le mot serait recopié
+    # dans le résumé. Aucune autre ligne du journal ne commence par « Source » :
+    # les fiches sont numérotées, le profil commence par ses clés de section, et
+    # le bulletin par « Academic Watch ».
+    assert "^Source" in motif_du_grep(etapes).split("|")
+
+
+def test_le_motif_recopie_exactement_ce_que_main_ecrit(etapes, capsys):
+    # Le motif et le journal sont deux fichiers : ils peuvent diverger sans
+    # qu'aucun des deux soit invalide, et le résumé se contente alors d'être
+    # vide, en silence, comme avant la V0.7. On produit donc les trois lignes
+    # que `main` écrit et on leur applique le motif extrait du workflow.
+    main.display_sources(
+        Recolte([], [SourceLue("Alpha", 0), SourceLue("Beta", 36)], 10)
+    )
+    lignes = [l for l in capsys.readouterr().out.split("\n") if l.strip()]
+    assert len(lignes) == 3, lignes
+    motif = re.compile(motif_du_grep(etapes))
+    for ligne in lignes:
+        assert motif.search(ligne), ligne
+
+
+def test_une_panne_est_recopiee_une_fois_et_son_detail_pas(etapes, capsys):
+    # La règle qui tient le résumé d'étape : une ligne `^Source` par source, et
+    # rien d'autre. Le détail d'une panne est indenté, donc le motif ne le prend
+    # pas — et il ne doit pas le prendre, le détail se lit dans le journal.
+    #
+    # Ce test existait déjà sans la panne, et il ne l'aurait pas vue : les trois
+    # lignes de `display_sources` passaient toutes le motif, et rien ne
+    # signalait qu'une quatrième, identique, pouvait en être copiée deux fois.
+    main.display_sources(
+        Recolte(
+            [],
+            [
+                SourceLue("Alpha", 10),
+                SourceLue("Beta", 0, "ConnectionError", "hôte exemple.test"),
+                SourceLue("Gamma", 0),
+            ],
+            12,
+        )
+    )
+    lignes = [l for l in capsys.readouterr().out.split("\n") if l.strip()]
+    rapport = [l for l in lignes if l.startswith("Source")]
+    details = [l for l in lignes if not l.startswith("Source")]
+
+    assert rapport == [
+        "Source Alpha : 10 opportunités extraites",
+        "Source Beta : lecture impossible (ConnectionError)",
+        "Source Gamma : aucun bloc trouvé",
+        "Sources sans sélecteurs : 12 activées et non lues, voir docs/SOURCES.md §8.",
+    ], rapport
+    assert details == ["   ConnectionError : hôte exemple.test"], details
+
+    motif = re.compile(motif_du_grep(etapes))
+    for ligne in rapport:
+        assert motif.search(ligne), ligne
+    for ligne in details:
+        assert not motif.search(ligne), ligne
+
+
+def test_le_message_de_commit_ne_recopie_pas_le_rapport(etapes):
+    # Un commit par jour qui porterait quatre lignes de compte de sources
+    # encombrerait l'historique de `data/` sans rien apprendre de plus. Le
+    # rapport est dans le résumé d'étape, lu une fois ; l'historique est lu en
+    # permanence.
+    assert "Source" not in motif_du_grep(etapes, "Enregistrer les résultats")

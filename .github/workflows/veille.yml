@@ -104,6 +104,12 @@ jobs:
           # runner, et une locale non UTF-8 le fait simplement ne rien
           # trouver. Les motifs retenus sont donc des extraits sans accent, ce
           # qui suffit à reconnaître les quatre lignes utiles.
+          #
+          # Le rapport par source de la V0.7 n'est volontairement pas ici. Il
+          # est dans le résumé d'étape, et un commit par jour qui porterait
+          # quatre lignes de compte de sources encombrerait l'historique de
+          # `data/` sans rien apprendre de plus. L'historique se lit en
+          # permanence, le résumé une fois.
           compte="$(grep -aoE '[0-9]+ nouvelles depuis' journal.txt | head -1 | grep -oE '^[0-9]+' || true)"
           date="$(date -u +%Y-%m-%d)"
 
@@ -138,7 +144,20 @@ jobs:
             # c'est la seule trace qu'un envoi a été tenté, et réussi ou non.
             # Un secret absent s'y lit aussi, donc une configuration incomplète se
             # voit sans avoir à ouvrir le journal.
-            grep -aE 'correspondent au profil|nouvelles depuis|dans data/|Rien de nouveau|Notification' journal.txt \
+            #
+            # `^Source` est le motif de la V0.7 : il attrape le rapport par
+            # source, écrit par `main.display_sources`. Le préfixe est en ASCII
+            # et ancré au début de la ligne, parce qu'aucune autre ligne du
+            # journal ne commence ainsi — les fiches sont numérotées, le profil
+            # commence par ses clés de section, et le bulletin par « Academic
+            # Watch ». Un motif non ancré attraperait un titre d'opportunité qui
+            # contiendrait le mot.
+            #
+            # Le même motif couvre les deux formes écrites par le programme, le
+            # compte de chaque source lue et la ligne « Sources sans
+            # sélecteurs », donc il n'y a pas deux ancres à faire diverger.
+            # L'ASCII est pour la raison de locale donnée plus haut.
+            grep -aE 'correspondent au profil|nouvelles depuis|dans data/|Rien de nouveau|Notification|^Source' journal.txt \
               || echo "La veille n'a rien produit."
             echo
             # La section « À signaler » est recopiée entière. C'est elle qui

@@ -615,9 +615,35 @@ que si elle satisfy les deux conditions :
 enabled = true   ET   présente dans config/selectors.json
 ```
 
-Conséquence : les 16 sources du registre qui n'ont pas encore de sélecteurs sont
-ignorées sans erreur. C'est voulu, ce sont des sources décidées mais pas encore
-lues.
+Conséquence : les sources sans bloc de sélecteurs sont ignorées sans erreur.
+C'est voulu, ce sont des sources décidées mais pas encore lues.
+
+### 8.1.1 Ce que la veille lit aujourd'hui
+
+Mesuré le 28 septembre 2026 sur les deux fichiers de configuration :
+
+| Ensemble | Nombre |
+| -------- | ------ |
+| sources inscrites au registre | 19 |
+| activées | 16 |
+| désactivées | 3 |
+| avec un bloc dans `config/selectors.json` | 4 |
+| activées et sans bloc de sélecteurs | 12 |
+| sans bloc de sélecteurs, activées ou non | 15 |
+
+La veille lit donc 4 sources sur 19, et 4 sur 16 activées. Les 15 autres sont
+des sources dont l'URL a été vérifiée sans que leur structure HTML l'ait été,
+ce que §1.2 explique.
+
+Depuis la V0.7, la veille écrit ce décompte dans son journal, sur une ligne :
+
+```text
+Sources sans sélecteurs : 12 activées et non lues, voir docs/SOURCES.md §8.
+```
+
+Avant cette version, rien ne le disait. Une source lue et une source jamais
+lue produisaient le même journal, donc la veille pouvait n'en lire qu'une sur
+quatre sans que ni les données ni le message du jour ne le montrent.
 
 La catégorie 3 (`portail_specialise`) est vide dans le registre, voir §4.
 

@@ -209,6 +209,27 @@ compte reste affiché, et les 69 fiches restent dans `data/opportunities.json`.
 Ce qui a été retiré de l'écran est ce qui est mesuré et écrit, pas ce qui
 est perdu.
 
+### Ce que la V0.7 a décidé
+
+`display_sources` écrit le rapport de la collecte, **entre le profil et le
+bulletin**, et sa place n'est pas un détail d'écriture.
+
+Le journal se lit dans l'ordre des données : le profil dit ce qu'on cherche, le
+rapport dit ce qu'on a trouvé, le bulletin dit ce qu'on en fait. Dans l'autre
+sens, le rapport décrirait les résultats après les résultats.
+
+La vraie raison est ailleurs : le workflow extrait la section « À signaler » avec
+un `sed` dont les deux ancres sont fixes, `signaler ===` et `Sauvegarde ===`. Une
+section glissée entre les deux se retrouverait dans le résumé d'étape, qui
+afficherait alors des lignes qui ne sont pas des résultats. Ça ne casserait rien
+et ne produirait aucune erreur : le résumé serait simplement faux, ce qui est le
+mode de panne le plus difficile à voir du projet.
+
+Le rapport passe aussi dans le bulletin, mais par `notifier.rendre`, et il n'y
+écrit qu'une ligne, seulement si une source n'a rien donné. Le compte complet
+reste dans le journal. Un message lu tous les jours n'a pas besoin de savoir que
+les quatre sources marchent.
+
 ---
 
 ## `src/scraper.py`
@@ -230,6 +251,37 @@ python src/scraper.py
 ```
 
 Le détail de la méthode et des verdicts est dans `docs/SOURCES.md` §1.
+
+### Ce que la V0.7 a décidé
+
+`collect_opportunities` rend une **`Recolte`**, et non une liste d'opportunités.
+Le module ne se contente plus d'extraire : il dit aussi ce que chaque source a
+apporté. Trois raisons, toutes deux :
+
+* **une panne doit se voir.** Mesuré le 27 septembre 2026, le journal ne
+  nommait aucune source : il disait « 69 opportunités enregistrées » aussi bien
+  quand les quatre sources fonctionnaient que quand aucune ne répondait. Une
+  source dont le site change de HTML reste silencieuse, et c'est la panne la
+  plus coûteuse du projet ;
+* **une mauvaise configuration ne doit pas tout casser.** Toutes les exceptions
+  sont rattrapées, pas seulement les erreurs réseau. Un nom de `parser` sans
+  module, ou un bloc de sélecteurs sans clé `item`, faisait perdre les fiches des
+  trois autres sources. Le type de l'exception est nommé dans le rapport, donc
+  une faute de configuration se distingue d'une coupure de réseau, et les deux
+  se réparent dans deux fichiers différents ;
+* **une source inscrite et jamais lue doit être comptée.** `sans_selecteurs` est
+  la différence entre les sources activées et les sources lues. Sur le registre
+  actuel, 12 sources activées n'ont pas encore de bloc de sélecteurs. Ce n'est
+  pas une panne, et le programme ne les signale donc pas dans le bulletin.
+
+Le module reste générique : il ne connaît aucun site, et `build_opportunity` ne
+sait rien de TUM ni de KAIST. `tests/test_scraper.py` le vérifie en faisant passer
+une page par les sélecteurs génériques et une autre par le parseur dédié, puis
+en comparant les deux résultats.
+
+Ce qui n'est **pas** couvert par ces tests est écrit dans l'en-tête du fichier :
+`test_source`, `classify` et `fetch_page` ne le sont pas. C'est un reste à faire
+assumé, pas un oubli, et le dire évite de croire le module entier testé.
 
 ---
 
@@ -375,7 +427,8 @@ temporaire.
 | `test_storage.py` | la sauvegarde, l'identité, le refus d'un fichier illisible |
 | `test_correspondance.py` | les paliers, le diplôme, les bourses, les contrats du module |
 | `test_main.py` | ce que la veille affiche, et le cas d'un jour sans nouveauté |
-| `test_donnees.py` | la cohérence des deux fichiers versionnés dans `data/` |
+| `test_donnees.py` | la cohérence des deux fichiers versionnés dans `data/`, et celle du registre avec les règles d'extraction |
+| `test_scraper.py` | ce que la collecte rend, et ce qu'elle fait quand une source échoue |
 | `test_workflow.py` | les choix écrits du workflow, le seul fichier non lançable en local |
 | `test_proprete.py` | l'encodage des fichiers et les caractères qui se glissent dedans |
 

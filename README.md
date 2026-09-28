@@ -72,13 +72,13 @@ academic-watch/
 ├── src/
 │   ├── main.py             # Point d'entrée : orchestration
 │   ├── models.py           # Format commun Opportunity
-│   ├── scraper.py          # Validation des sources + extraction
+│   ├── scraper.py          # Validation, extraction, rapport par source
 │   ├── parsers/
 │   │   └── kaist_scholarship.py  # Parseur dédié, structure non exprimable en CSS
 │   ├── matches.py          # Correspondance avec le profil, score, raisons
 │   ├── storage.py          # Historique JSON et détection des doublons
 │   └── notifier.py         # Bulletin : rendu une fois, console + email
-├── tests/                  # 308 tests, lancés par pytest
+├── tests/                  # 358 tests, lancés par pytest
 ├── pytest.ini
 ├── requirements.txt
 ├── requirements-dev.txt
@@ -91,6 +91,13 @@ sources faire partie de la veille, `selectors.json` dit **où** trouver les
 informations dans chaque page. C'est ce qui permet d'inscrire une source dans
 le cahier des charges avant de savoir la lire, et d'ajouter une source sans
 modifier le code.
+
+Ce que la veille lit au 28 septembre 2026 : **4 sources sur 19 inscrites**, dont
+4 sur 16 activées. Les 15 autres ont une URL vérifiée et pas de sélecteurs
+écrits, et c'est un état normal, pas un oubli — sauf pour celles qui avaient des
+sélecteurs et n'en produisent plus, et c'est précisément ce que la veille
+signale désormais, source par source, dans son journal et dans le résumé d'étape
+du workflow.
 
 ## Installation
 

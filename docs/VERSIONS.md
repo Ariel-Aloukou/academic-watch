@@ -875,6 +875,188 @@ Chaque source doit produire le même format de données.
 
 Il ne faut pas réécrire tout le programme pour ajouter une nouvelle source.
 
+## État mesuré
+
+### Le mécanisme était atteint, l'ajout de sources ne l'était pas
+
+Les deux dernières lignes de l'objectif sont vérifiées depuis la V0.4, et il
+fallait le dire : les quatre sources du jour produisent toutes des
+`Opportunity`, et aucune n'a nécessité d'écrire dans `src/scraper.py`.
+`build_opportunity` ne connaît aucun site, et `tests/test_scraper.py` le vérifie
+en faisant passer une page par les sélecteurs génériques et une autre par le
+parseur dédié de KAIST, puis en comparant les deux résultats.
+
+| Source | Stratégie de lecture | Fiches |
+| ------ | ------------------- | ------ |
+| KAIST – Explore Programs | sélecteurs CSS | 36 |
+| EACEA – Erasmus Mundus catalogue | sélecteurs CSS | 20 |
+| TUM – Degree programs | sélecteurs CSS | 10 |
+| KAIST – Scholarship | `src/parsers/kaist_scholarship.py` | 3 |
+
+Mais « ajouter plusieurs sources » n'était pas fait pour autant. Sur le
+registre du 28 septembre 2026 :
+
+| Ensemble | Nombre |
+| -------- | ------ |
+| sources inscrites | 19 |
+| activées | 16 |
+| désactivées | 3 |
+| avec un bloc dans `config/selectors.json` | 4 |
+| activées et sans bloc de sélecteurs | 12 |
+| sans bloc de sélecteurs, activées ou non | 15 |
+
+Douze sources activées ne produisent rien. Ce n'est pas un oubli : une source
+est inscrite au cahier des charges avant de savoir la lire, c'est la raison
+d'être des deux fichiers de configuration. Mais cela rendait la veille
+**inmesurable**, et c'est le défaut que la version corrige.
+
+### Le défaut : une panne silencieuse
+
+`collect_opportunities` n'affichait quelque chose que sur `requests.RequestException`.
+Mesuré sur le run du 27 septembre 2026 : **zéro ligne du journal ne nommait une
+source.** Le journal disait « 69 opportunités enregistrées », et il disait
+exactement la même chose selon que les quatre sources fonctionnaient ou
+qu'aucune ne répondait plus.
+
+Trois situations, un seul silence :
+
+| Situation | Ce qu'elle signifie | Réparation |
+| --------- | ------------------- | ---------- |
+| pas de bloc de sélecteurs | source décidée, pas encore lue | écrire `config/selectors.json` |
+| la lecture a levé une erreur | source en panne ce jour | attendre, ou voir le détail |
+| 0 fiche après lecture | **le site a changé** | réécrire les sélecteurs |
+
+La troisième est la plus coûteuse et la moins visible : une page qui répond
+toujours, avec un contenu différent. Un programme qui l'ignore perd une saison
+de bourses sans qu'aucune donnée ne le montre, parce que les données sont
+juste moins nombreuses.
+
+C'est aussi la plus facile à manquer parce que le compte baisse peu : KAIST
+passer de 36 programmes à 0 ferait passer le total de 69 à 33, et un total de 33
+ne crie pas.
+
+### Trois décisions
+
+**`collect_opportunities` rend une `Recolte`, pas une liste.** Une liste ne dit
+rien de sa provenance, et le seul moyen de faire dire à une fonction d'où
+viennent ses données était de la changer. Le rendu est :
+
+| Champ | Rôle |
+| ----- | ---- |
+| `opportunities` | les fiches, comme avant, dans l'ordre des sources |
+| `sources` | une `SourceLue` par source lue : `nom`, `nombre`, `erreur`, `detail` |
+| `sans_selecteurs` | combien de sources activées n'ont pas été lues |
+
+`erreur` porte le **type** de l'exception et `detail` son **message**. Ce n'est
+pas de la redondance, c'est deux lecteurs : `erreur` est ce qui tient sur une
+ligne d'email et ce qui distingue une coupure de réseau d'une faute de
+configuration, `detail` est ce qu'on ouvre dans le journal quand on cherche
+pourquoi une source est tombée, parce qu'il contient l'hôte, le port et le
+chemin de l'URL et n'intéresse pas l'étudiant.
+
+Le rapport est écrit par un seul écran, `main.display_sources`, jamais par la
+collecte. Une première version écrivait la panne dans les deux, et le journal
+la disait donc deux fois — dont deux fois dans le résumé d'étape, puisque le
+motif du workflow est justement `^Source`. Le message complet est maintenant
+indenté sous sa source : il ne commence pas par « Source », donc le workflow ne
+le recopie pas, et il se lit à l'endroit exact où il sert.
+
+**Toutes les exceptions sont rattrapées, pas seulement les erreurs réseau.**
+Avant, un nom de `parser` sans module dans `src/parsers/`, ou un bloc de
+sélecteurs sans clé `item`, faisaient tomber les 68 fiches des trois autres
+sources avec eux : `ModuleNotFoundError` et `KeyError` ne sont pas des
+`RequestException`. Les deux se réparent dans deux fichiers différents, donc il
+fallait pouvoir les distinguer, et il fallait que l'une ne fasse pas tomber
+l'autre. Le type est nommé, donc une `KeyError` se lit au lieu de se déguiser
+en coupure de réseau.
+
+**Le rapport est complet dans le journal, et une seule ligne dans l'email.** Le
+journal affiche une ligne par source, plus le compte des sources non lues. Le
+bulletin n'écrit **rien** quand tout va bien, et une ligne
+`Attention : <source> n'a rien produit (<raison>).` par source muette sinon.
+C'est la même règle que pour un champ absent dans une fiche, et la même que la
+V0.5 a posée : une ligne qui répète que la veille marche comme hier est du bruit
+dans un message lu tous les jours. Le compte complet est dans le journal, que le
+workflow recopie dans son résumé d'étape.
+
+Le journal se lit ainsi :
+
+```text
+=== Profil de recherche ===
+...
+Source TUM - Degree programs : 10 opportunités extraites
+Source KAIST - Explore Programs : 36 opportunités extraites
+Source KAIST - Scholarship : 3 opportunités extraites
+Source EACEA - Erasmus Mundus catalogue : 20 opportunités extraites
+Sources sans sélecteurs : 12 activées et non lues, voir docs/SOURCES.md §8.
+```
+
+Le préfixe est en ASCII et ancré au début de la ligne, pour deux raisons : le
+workflow s'en sert comme motif `^Source` dans son résumé d'étape, et un motif
+accentué ne trouve rien sur un runner réglé dans une locale qui n'est pas UTF-8.
+Le même motif couvre les deux formes, donc il n'y a pas deux ancres à faire
+diverger.
+
+### Tests
+
+`tests/test_scraper.py` est créé, et c'est le premier du projet qui parle de
+`src/scraper.py`. Le module fait plus de 440 lignes et n'avait aucun test : rien
+ne garantissait qu'une source qui cesse de répondre serait signalée, et rien ne
+garantissait qu'une faute de configuration ne ferait pas tomber la collecte
+entière. Le manque est comblé en même temps que la fonction, pas après.
+
+18 tests, dont six qui ne sont pas du tout évidents :
+
+* une coupure de réseau sur une source laisse les trois autres produire leurs
+  fiches, et la source en question porte `ConnectionError` ;
+* un `parser` absent ne tue plus la veille, et se distingue d'une coupure ;
+* un bloc de sélecteurs sans `item` ne tue plus la veille, et se distingue aussi ;
+* **la collecte n'écrit rien**, elle rend la panne. Un seul écran écrit le
+  rapport, et un écrivain de trop se prouve en vérifiant qu'il se tait. Ce test
+  n'a qu'une assertion, et elle est négative ;
+* une source laissée réelle est bloquée par la fixture de `conftest.py`, et le
+  rapport le dit. Sans ce test, un faux téléchargement oublié donnerait un test
+  vert : l'`AssertionError` du garde-fou serait rattrapée comme une coupure de
+  réseau, et le test passerait avec un rapport de pannes.
+
+Le quatrième mérite un mot. Une première version écrivait la panne **dans les
+deux** écrans : `collect_opportunities` écrivait « Source X : lecture
+impossible » puis son détail, et `display_sources` écrivait « Source X : lecture
+impossible (KeyError) » pour la même source. Le journal la disait donc deux fois,
+et le motif `^Source` du workflow la reprenait deux fois dans le résumé d'étape.
+Le test « la collecte n'écrit rien » est la trace de cette faute, et il a été
+écrit parce qu'elle a été vue en relisant le journal d'un run réel, pas dans un
+test.
+
+Les propriétés ont été éprouvées par mutation : chacune a été cassée
+volontairement, et chacune a fait échouer les tests qui la couvrent — huit
+mutations pour cette version, dont l'indentation du détail et l'ordre de ses
+deux lignes. Un test qui ne peut pas échouer ne prouve rien.
+
+`tests/test_donnees.py` a reçu quatre tests de cohérence du registre, qui
+n'existent pas pour la V0.7 mais parce qu'en écrivant les chiffres ci-dessus
+ils sont sortis trois fois faux. Ces tests ne fixent aucun nombre — un nombre
+fixé serait rouge le jour où l'utilisateur ajoute une source — et vérifient des
+propriétés : un bloc de sélecteurs désigne toujours une source inscrite, un nom
+n'est pas utilisé deux fois dans un même fichier, une source désactivée n'est
+jamais lue, et les sources lues et les sources comptées se partagent exactement
+les sources activées.
+
+### Ce que la version ne fait pas
+
+* **Douze sources activées restent non lues.** Les écrire demanderait un bloc de
+  `config/selectors.json` par source, donc une modification de `config/`, qui
+  n'a pas été autorisée. C'est le travail suivant, et il se fait source par
+  source avec mesure, pas en une passe. Voir `docs/SOURCES.md` §6.2 pour les
+  candidates, et §5 pour leur verdict réel.
+* **`src/scraper.py` n'est pas entièrement testé.** `tests/test_scraper.py`
+  couvre le contrat de la version, et pas `test_source`, `classify` ni
+  `fetch_page`. Les deux derniers touchent le réseau et demanderaient une
+  seconde couture d'injection ; c'est un reste à faire assumé, écrit dans
+  l'en-tête du fichier de tests, pour que personne ne croie le module couvert.
+* **`deadline` reste à 0 / 69.** Rien dans cette version n'y change, et rien ne
+  pouvait : la mesure est dans `docs/SOURCES.md` §6.3.
+
 ---
 
 # V0.8 - GitHub Actions
