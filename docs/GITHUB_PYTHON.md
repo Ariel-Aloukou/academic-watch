@@ -125,13 +125,15 @@ Un runner GitHub Actions est une machine jetable, détruite à la fin de
 l'exécution. Ce workflow écrit 69 fiches dans `data/`, puis la machine disparaît
 avec. La veille fonctionnerait en local et perdrait toute mémoire dès le
 premier run automatique. C'est le défaut que le workflow réel corrige, avec
-l'étape `Enregistrer les résultats`, la permission `contents: write`, et
-`fetch-depth: 0` sans lequel le rebase de sécurité échoue.
+l'étape `Enregistrer les résultats`, la permission `contents: write`,
+`fetch-depth: 0` sans lequel le rebase de sécurité échoue, et
+`timeout-minutes: 30` sans lequel un run bloqué resterait en cours pendant les
+360 minutes du défaut de GitHub.
 
 Le workflow à utiliser est `.github/workflows/veille.yml`, et le détail de chaque
-choix est dans `docs/VERSIONS.md` V0.8. `tests/test_workflow.py` en vérifie les
-invariants, parce que ce fichier est le seul du projet qui ne peut pas être
-lancé chez soi.
+choix est dans `docs/VERSIONS.md` V0.8 pour l'exécution et V0.9 pour la
+planification. `tests/test_workflow.py` en vérifie les invariants, parce que ce
+fichier est le seul du projet qui ne peut pas être lancé chez soi.
 
 ---
 
@@ -181,6 +183,36 @@ schedule:
 Cela signifie une exécution quotidienne à 07:00 selon le fuseau utilisé par GitHub Actions.
 
 Le système de planification utilise le format **cron** (une notation permettant de définir des horaires automatiquement).
+
+## Ce que GitHub décide seul
+
+Deux règles de la plateforme s'appliquent et ne se configurent pas.
+
+**La planification ne s'exécute que sur la branche par défaut.** Le workflow est
+écrit dans `main`, donc c'est déjà le bon cas. Le modifier dans une branche ne
+change rien tant qu'il n'est pas poussé sur `main`.
+
+**Un dépôt public sans activité pendant soixante jours voit sa planification
+désactivée.** GitHub le formule ainsi : *In a public repository, scheduled
+workflows are automatically disabled when no repository activity has occurred in
+60 days.* La règle ne concerne que les dépôts publics.
+
+Academic Watch ne produit pas d'activité quotidienne : un jour sans nouveauté ne
+crée aucun commit, par la décision de la V0.8. Une période de soixante jours sans
+changement des données compterait donc comme une période sans activité.
+
+Si la planification s'arrête un jour, elle se réactive dans l'onglet **Actions** :
+sélectionner **Academic Watch** dans la barre latérale, puis **Enable workflow**.
+La même opération existe en ligne de commande :
+
+```shell
+gh workflow enable Academic Watch
+```
+
+Le moyen de le savoir reste le même que pour le reste : l'onglet Actions montre
+les exécutions, et une journée sans exécution se remarque à l'absence de ligne.
+
+Le détail de la fréquence choisie est dans `docs/VERSIONS.md` V0.9.
 
 ---
 

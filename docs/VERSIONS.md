@@ -1150,6 +1150,96 @@ Notification
 
 Une exécution manuelle doit également rester possible.
 
+## État mesuré
+
+La version est écrite. La planification quotidienne et le déclenchement à la
+demande étaient déjà là depuis la V0.8 : le `cron "0 7 * * *"` et le
+`workflow_dispatch` n'ont pas été ajoutés ici, et les tests qui les vérifient
+sont dans `tests/test_workflow.py`, section 3.
+
+Ce que cette version ajoute tient en une ligne de YAML : le **plafond
+d'exécution** du job, `timeout-minutes: 30`. Il faut dire pourquoi, parce que la
+raison évidente est fausse.
+
+| Mesure | Valeur |
+| ------ | ------ |
+| durée d'un run en local, mesurée le 28 septembre 2026 | 17,5 s |
+| délai d'une requête réseau, `scraper.TIMEOUT_SECONDS` | 30 s |
+| pire cas du réseau, quatre sources lues | 120 s |
+| suite de tests, 360 tests | 3,0 s |
+| plafond écrit dans le workflow | 30 min |
+| défaut de GitHub pour un job | 360 min |
+
+### Le raisonnement qui ne tient pas
+
+L'argument naturel est « un run bloqué ne doit pas faire perdre une journée ». Il
+ne tient pas, et il ne doit pas être écrit dans le dépôt.
+
+GitHub n'admet qu'une seule exécution en attente par groupe de concurrence :
+*by default, any existing pending job or workflow in the same concurrency group
+will be canceled and the new queued job or workflow will take its place.*
+Perdre une journée exigerait donc qu'un run bloque plus de vingt-quatre heures.
+Or le défaut de GitHub abandonne un job au bout de 360 minutes, soit six heures.
+Un blocage isolé ne peut pas faire perdre une journée, et le plafond de trente
+minutes n'apporte rien de ce côté-là.
+
+Ce que le plafond apporte est plus modeste, et vrai :
+
+* un run cassé devient rouge dans la matinée, au lieu de l'être six heures plus
+  tard ;
+* la valeur écrite décrit le job. Un défaut de 360 minutes laissé en place
+  affirme qu'un job de dix-sept secondes a le droit de durer six heures ;
+* la seule situation où le groupe de concurrence agit vraiment — deux
+  exécutions manuelles lancées pendant qu'un run est déjà en cours — a une
+  fenêtre qui tombe de six heures à trente minutes.
+
+### Ce que les tests vérifient
+
+Deux tests dans `tests/test_workflow.py`, section 3. Le second ne compare pas à un
+nombre écrit en dur : il exige que le plafond reste très au-dessus du délai d'une
+seule requête, délai lu dans `scraper.TIMEOUT_SECONDS`. Si ce délai change un jour,
+le test suit au lieu de devenir faux.
+
+Quatre mutations ont été éprouvées, chacune devant faire rougir le test qui
+couvre la propriété : plafond supprimé, plafond à 400 minutes, plafond à
+5 minutes, plafond décimal. Comme GitHub refuse une valeur décimale, ce test
+porte aussi une contrainte de validité du workflow. Le fichier a été restauré
+à l'octet après l'épreuve, et les 30 tests du fichier repassent au vert.
+
+## Ce que l'exécution automatique ne peut pas garantir
+
+Quatre points : deux viennent de la documentation GitHub, relevée le 28
+septembre 2026, et deux sont des faits sur ce projet lui-même. Aucun ne se
+répare dans le code, donc ils sont écrits plutôt que présentés comme
+résolus.
+
+* **Un dépôt public sans activité pendant soixante jours voit sa planification
+  désactivée.** *In a public repository, scheduled workflows are automatically
+  disabled when no repository activity has occurred in 60 days.* La règle ne vise
+  que les dépôts publics, et celui-ci répond `404` à une requête anonyme, ce qui
+  est ce que fait un dépôt privé ; elle ne devrait donc pas le concerner. Cela
+  n'a pas été vérifié par un appel authentifié, et c'est le seul point de cette
+  version qui repose sur une inférence.
+  Le point mérite d'être connu quand même, parce que la veille ne produit pas
+  d'activité quotidienne : depuis la V0.8, un jour sans nouveauté ne produit
+  aucun commit. Une période de soixante jours sans changement des données
+  compterait donc comme une période sans activité. La réactivation se fait dans
+  l'onglet Actions, en sélectionnant le workflow puis **Enable workflow**, ou par
+  `gh workflow enable Academic Watch`.
+* **La planification ne s'exécute que sur la branche par défaut.** C'est `main`,
+  où le workflow est écrit, donc le cas est déjà le bon.
+* **Aucun email n'est envoyé si le run échoue avant le programme.** L'email part
+  de `notifier.publier`, et les tests passent avant la veille : un code cassé
+  arrête le run avant qu'aucune ligne Python ne s'exécute. L'étudiant n'en
+  apprend rien par courriel et doit ouvrir l'onglet Actions. Corriger cela
+  demanderait de mettre les six secrets dans une étape shell, ce que le projet
+  refuse par principe : la valeur d'un secret n'est jamais écrite dans une
+  commande, dans le workflow comme dans le code.
+* **Rien n'a été exécuté sur GitHub.** La version est vérifiée en local, relue
+  dans le YAML et éprouvée par mutations, mais le premier run automatique reste
+  la seule validation qui manque. Comme en V0.8, il faudra lancer le workflow à
+  la main.
+
 ---
 
 # V1.0 - Version fonctionnelle

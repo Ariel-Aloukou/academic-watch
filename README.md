@@ -48,7 +48,15 @@ nouveauté ne produit rien dans l'historique du dépôt. Le message dit ce qui a
 Le workflow est écrit et testé, mais **il n'a pas encore été exécuté sur
 GitHub**. C'est le seul endroit du projet qui ne peut pas être validé en local.
 Il reste à l'activer, ou à attendre le prochain 07:00 UTC. Le détail des
-choix est dans `docs/VERSIONS.md` V0.8.
+choix est dans `docs/VERSIONS.md` V0.8 pour l'exécution et V0.9 pour la
+planification.
+
+Une règle de GitHub ne se configure pas et vaut mieux être connue : la
+planification est désactivée automatiquement sur un dépôt **public** sans
+activité pendant soixante jours. Comme un jour sans nouveauté ne crée aucun
+commit, une longue période calme compte comme une période sans activité. La
+réactivation se fait dans l'onglet Actions, ou par
+`gh workflow enable Academic Watch`.
 
 ## Architecture
 
