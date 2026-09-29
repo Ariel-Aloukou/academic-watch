@@ -14,7 +14,7 @@
       "country": "Norway",
       "type": "programs",
       "url": "https://www.ntnu.edu/studies/international/master",
-      "enabled": false
+      "enabled": true
     },
     {
       "name": "KAIST - Explore Programs",

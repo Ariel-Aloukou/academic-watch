@@ -13,6 +13,16 @@
       }
     },
     {
+      "name": "NTNU - Master's programmes in English",
+      "university": "Norwegian University of Science and Technology",
+      "base_url": "https://www.ntnu.edu",
+      "selectors": {
+        "item": "table tr",
+        "title": "td:first-child a",
+        "url": "td:first-child a"
+      }
+    },
+    {
       "name": "KAIST - Explore Programs",
       "university": "KAIST",
       "base_url": "https://admission.kaist.ac.kr",
