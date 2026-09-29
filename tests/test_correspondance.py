@@ -356,6 +356,93 @@ def test_national_students_est_bien_refuse():
     assert "réservée à une population nationale" in " ".join(resultat["reasons"])
 
 
+# 5 bis. Les autres façons de dire « ouvert aux étudiants étrangers »
+#
+# Exiger le mot « international » écartait des bourses entièrement ouvertes.
+# C'est le défaut inverse de celui corrigé plus haut : là, « international
+# students » était lu comme « national student » ; ici, une page qui écrit
+# « schools overseas » n'était pas lue du tout. La page MEXT est le cas mesuré.
+#
+# Chaque forme de la liste est vérifiée par une phrase réelle. C'est ce qui
+# interdit qu'une entrée ajoutée à la liste ne soit jamais exercée : une faute
+# de frappe y passerait sinon sans qu'aucun test ne le voie.
+
+
+FORMULES_OUVERTURE = {
+    "international": "Open to international students",
+    "overseas": "based on their student-exchange agreements with schools overseas",
+    "foreign students": "open to foreign students holding a valid residence permit",
+}
+
+
+def test_chaque_formule_de_liste_a_sa_phrase_reelle():
+    # Les deux ensembles doivent être le même : ni mot inutilisé, ni phrase
+    # testée qui n'est pas dans la liste.
+    assert set(FORMULES_OUVERTURE) == set(matches.OUVERTURE_INTERNATIONALE)
+
+
+@pytest.mark.parametrize("formule", sorted(FORMULES_OUVERTURE))
+def test_chaque_formule_d_ouverture_vaut_les_points(formule):
+    resultat = evaluer(
+        bourse(
+            diplome="Master's",
+            eligibilite=[FORMULES_OUVERTURE[formule]],
+            financement="Full tuition",
+        ),
+        PROFIL,
+    )
+    assert resultat["matched"], f"{formule} n'ouvre pas la bourse : {resultat['reasons']}"
+    assert "ouverte aux étudiants internationaux" in " ".join(resultat["reasons"])
+
+
+def test_la_phrase_mext_ouvre_la_bourse():
+    # Non-régression, avec la phrase recopiée de la page. Le critère `niveau`
+    # passe par « master's program » et le pays est préféré, donc la bourse est
+    # retenue pour la bonne raison et non par un hasard de score.
+    resultat = evaluer(
+        bourse(
+            diplome="Master's",
+            eligibilite=[
+                "You must be under 35 years of age and be eligible for admission "
+                "to a master's program or a doctoral program (first or second "
+                "stage) at a Japanese graduate school.",
+                FORMULES_OUVERTURE["overseas"],
+            ],
+            financement="Full tuition",
+            country="Japan",
+        ),
+        PROFIL,
+    )
+    assert resultat["matched"]
+    assert "ouverte aux étudiants internationaux" in " ".join(resultat["reasons"])
+
+
+def test_une_restriction_nationale_l_emporte_sur_overseas():
+    # L'ordre des deux listes décide du résultat. « overseas » décrit un
+    # parcours, « citizen » réserve la bourse : la restriction doit gagner.
+    resultat = evaluer(
+        bourse(
+            diplome="Master's",
+            eligibilite=["Open to citizens of the partner country who studied overseas"],
+            financement="Full tuition",
+        ),
+        PROFIL,
+    )
+    assert not resultat["matched"]
+    assert "réservée à une population nationale" in " ".join(resultat["reasons"])
+
+
+def test_une_bourse_sans_ouverture_publiee_reste_ecartee():
+    # Le contre-test : élargir la liste ne doit pas ouvrir toutes les bourses.
+    # C'est ce qui protège le jour où quelqu'un y ajouterait un mot trop large.
+    resultat = evaluer(
+        bourse(diplome="Master's", eligibilite=["Open to candidates of the university"]),
+        PROFIL,
+    )
+    assert not resultat["matched"]
+    assert "non précisée" in " ".join(resultat["reasons"])
+
+
 def test_un_financement_complet_prend_plus_qu_un_partiel():
     complet = mesure(bourse(financement="Full tuition"), "financement")
     partiel = mesure(bourse(financement="Tuition reduction"), "financement")

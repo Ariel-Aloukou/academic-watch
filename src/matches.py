@@ -110,6 +110,22 @@ NIVEAUX_DOCTORAUX = ("ph.d", "phd", "doctorate", "doctoral")
 # students » et « national student ».
 RESTRICTIONS_NATIONALES = ("citizen", "domestic", "national student", "home student")
 
+# Formules par lesquelles une page dit qu'elle ouvre sa bourse aux étudiants
+# étrangers, sans écrire le mot « international ».
+#
+# La page MEXT (Study in Japan) n'écrit jamais « international students » au
+# sujet de la bourse : elle écrit « their student-exchange agreements with
+# schools overseas ». Exiger le mot anglais écartait donc une bourse entièrement
+# ouverte, ce qui est le même défaut que celui de « national student » corrigé
+# plus haut, lu dans l'autre sens.
+#
+# Limite assumée : ces mots disent où l'étudiant vient, pas qu'il est
+# accepté. Une page qui dirait « reserved for students who studied overseas »
+# serait comptée comme ouverte. Le code ne comprend pas la négation, et une
+# phrase au sens négatif est lue comme une positive : c'est le prix d'une règle
+# par mots, et il vaut mieux le dire que le cacher.
+OUVERTURE_INTERNATIONALE = ("international", "overseas", "foreign students")
+
 # Mots qui signalent une prise en charge complète des frais de scolarité.
 FINANCEMENT_COMPLET = ("full", "complete", "waiver", "coverage")
 
@@ -373,6 +389,9 @@ def mesure_international(opportunity, profil, points):
     C'est la question que le profil pose en premier : un ressortissant du
     pays d'accueil n'en profite pas de la même façon. Une page qui ne le dit
     pas n'est pas retenue pour autant, elle est signalée comme indéterminée.
+
+    Les mots cherchés sont ceux de `OUVERTURE_INTERNATIONALE`, pas seulement
+    « international » : la page MEXT écrit « schools overseas ».
     """
     texte = texte_de(opportunity.eligibility, opportunity.description).lower()
     if not texte:
@@ -380,7 +399,7 @@ def mesure_international(opportunity, profil, points):
 
     if any(contient_mot(texte, restriction) for restriction in RESTRICTIONS_NATIONALES):
         return _mesure("international", 0, "réservée à une population nationale")
-    if contient_mot(texte, "international"):
+    if any(contient_mot(texte, forme) for forme in OUVERTURE_INTERNATIONALE):
         return _mesure("international", points, "ouverte aux étudiants internationaux")
     return _mesure(
         "international", 0, "ouverture aux étudiants internationaux non précisée"
