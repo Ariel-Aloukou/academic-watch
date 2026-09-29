@@ -1242,6 +1242,197 @@ résolus.
 
 ---
 
+# V0.10 - Second canal de notification
+
+## Objectif
+
+Ne plus dépendre d'un canal que l'étudiant ne peut pas ouvrir.
+
+La V0.6 a retenu l'email parce que c'est le seul moyen que la boîte aux lettres
+de l'étudiant ouvre déjà. Il se heurte à un obstacle qu'aucune ligne de code ne
+contourne : Outlook exige un mot de passe d'application, donc une double
+authentification, donc une configuration à faire sur un autre appareil que celui
+qui fait la veille. Tant qu'elle n'est pas faite, les six secrets existent et
+l'email ne part jamais. Le résumé d'étape le dira tous les jours, ce qui est
+honnête et inutile.
+
+Un canal ne sert à rien si personne ne peut l'ouvrir. Cette version en ajoute un
+second, qui tient en une variable et ne demande rien d'autre.
+
+## La décision : un webhook, et pas un bot
+
+**Un bot Discord.** Il faudrait une application, un jeton, et inviter ce bot dans
+le salon. Le jeton serait un secret de plus, la marche à suivre serait plus
+longue que celle du webhook, et le bot pourrait faire autre chose que poster un
+bulletin.
+
+**Un webhook.** Une URL qui donne le droit d'écrire dans un salon, et rien
+d'autre. Discord la génère dans les paramètres du salon, sans compte à créer et
+sans authentification à configurer. Sa documentation le dit en une phrase :
+*Webhooks are a low-effort way to post messages to channels in Discord. They do
+not require a bot user or authentication to use.*
+
+C'est celle-là, et elle a sa contrepartie : l'URL est elle-même une autorisation.
+Quiconque la possède peut écrire dans le salon. Elle est donc un secret au même
+titre qu'un mot de passe, pour la même raison : ce n'est pas une adresse, c'est
+une clé.
+
+## Un seul rendu, deux canaux
+
+Le texte est produit une fois par `rendre`, et `publier` l'affiche puis l'envoie
+aux canaux configurés. Les six variables SMTP restent en place, et les cinq
+formes de la ligne de statut plus bas montrent le programme avec l'un des deux
+canaux, avec les deux, et avec aucun.
+
+`publier` ne lève jamais, et le premier canal n'empêche pas le second. C'est
+exactement le cas de l'étudiant : son serveur de messagerie est cassé, et son
+bulletin doit quand même partir sur l'autre canal.
+
+## Deux plafonds, et il ne faut pas les confondre
+
+| Plafond | Valeur | D'où il vient |
+| ------ | ------ | ------------- |
+| `LIMITE_MESSAGE` | 2 000 caractères | une limite de l'API |
+| `MESSAGES_MAX` | 5 messages | un choix de lisibilité |
+
+La première est écrite dans la documentation : la page `Execute Webhook`
+annonce, pour le champ `content`, « the message contents (up to 2000
+characters) ». Elle ne se négocie pas.
+
+La seconde n'est pas une limite de Discord. La documentation ne dit nulle part
+combien de messages un salon accepte : elle limite la longueur de chacun, donc
+rien n'empêche d'en envoyer cinquante. C'est une décision sur ce qu'un écran de
+téléphone peut afficher à 7 h du matin, quand treize messages de 2 000 caractères
+se ressembleraient tous. Ce qui ne rentre pas n'est pas perdu : le résumé d'étape
+recopie la section « à signaler » entière, l'email n'a pas de limite, et la ligne
+de statut compte ce qui a été omis au lieu de passer sous silence.
+
+## Le bulletin est coupé, jamais tronqué
+
+Un bulletin de 3 493 caractères ne tient pas dans un message. Il est coupé sur
+les frontières de ligne : rien n'est perdu, et un champ n'est jamais coupé en
+deux. La ligne la plus longue du pire cas mesuré fait 375 caractères, donc la
+coupure en fin de ligne suffit aujourd'hui. Le débitage au caractère reste écrit
+pour le jour où un titre de page dépasserait 2 000 caractères, et il a son test.
+
+## La limite de débit est lue, jamais écrite
+
+*Because rate limits depend on a variety of factors and are subject to change,
+rate limits should not be hard coded into your app. Instead, your app should
+parse response headers to prevent hitting the limit, and to respond accordingly
+in case you do.*
+
+Le programme lit donc `X-RateLimit-Remaining`, et quand il vaut zéro,
+`X-RateLimit-Reset-After`, que la documentation décrit comme pouvant « have
+decimals ». La pause est plafonnée par `ATTENTE_MAX`, parce qu'un en-tête absent
+ou aberrant ne doit pas faire dormir un run. Un 429 n'est pas réessayé : il est
+nommé dans la ligne de statut. La documentation le justifie sur un autre point,
+qu'il vaut mieux connaître : *If a webhook returns a 404 status you should not
+attempt to use it again*.
+
+## Un défaut trouvé après coup, dans la même documentation
+
+Le code envoyait `content` sans le paramètre `wait`. C'est un défaut réel, de la
+même famille que celui que `raise_for_status` corrige ailleurs : une réussite
+supposée là où il faut une réussite prouvée.
+
+La valeur par défaut de `wait` est `false`, et la documentation écrit que, dans
+ce cas, « a message that is not saved does not return an error ». La réponse est
+alors un `204 No Content` que la vérification d'erreur laisse passer. Le
+programme aurait donc dit « 1 message envoyé » pour un message absent du salon,
+et la ligne de statut aurait nommé une veille qui fonctionnait. Aucun test ne
+pouvait le voir : il lisait la constante.
+
+Le correctif est un paramètre de requête, `params={"wait": "true"}`, et non un
+morceau collé à l'URL, parce que l'URL porte le secret et doit arriver telle
+quelle. Avec `wait`, la réponse n'est un succès qu'une fois le message
+enregistré, et un refus devient un 4xx que `raise_for_status` voit.
+
+## État mesuré
+
+| Mesure | Valeur |
+| ------ | ------ |
+| suite de tests, 390 tests | environ 5 s |
+| tests ajoutés, de 360 à 390 | +30 |
+| tests du canal Discord, section 7 de `test_notifier.py` | 29 |
+| tests du workflow, dont celui qui interdit l'URL en clair | 31 |
+| mutations éprouvées rouges | 18 |
+| secrets lus par le programme | 7 |
+| bulletin du 28 septembre 2026 | 3 493 caractères, 2 messages |
+| pire cas, 69 fiches toutes retenues | 25 317 caractères, 13 messages |
+| journée sans rien à signaler | 346 caractères, 1 message |
+| ligne la plus longue du pire cas | 375 caractères |
+| limite d'un `content` | 2 000 caractères |
+| messages envoyés sans attendre | 5, le reste compte dans la ligne |
+
+Les 18 mutations sont le contrôle qui vaut le plus ici, parce qu'une constante
+lue par les tests ne peut pas être prouvée fausse par eux : un test qui compare
+à `LIMITE_MESSAGE` passe quelle que soit sa valeur. Chacune des 18 casse le code,
+le workflow ou un test, et le fichier est rendu à l'octet après chacune ; la suite
+complète repasse au vert ensuite.
+
+## Les cinq formes de la ligne de statut
+
+C'est cette ligne que le workflow recopie dans le résumé d'étape, donc c'est la
+seule trace qu'un run automatique a réussi à notifier. Les cinq formes sont
+mesurées, sans un seul appel sortant :
+
+```text
+A aucun secret
+  Notification : console seule, il manque SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO, Discord non configuré
+B les six SMTP
+  Notification : email non envoyé (OSError), Discord non configuré, la veille est complète
+C le webhook seul
+  Notification : email non configuré (il manque SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO), Discord, 1 message envoyé
+D les sept secrets
+  Notification : email non envoyé (OSError), Discord, 1 message envoyé, la veille est complète
+E webhook et bulletin trop long
+  Notification : email non configuré (il manque SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO), Discord, 5 messages envoyés, 4 messages de plus dans le résumé du run
+```
+
+Le cas A est le mode par défaut, et c'est le cas le plus probable le premier
+jour : rien n'est configuré, et le programme fonctionne quand même. Le cas C est
+celui de l'étudiant. Deux règles se lisent dans ces cinq lignes : « console
+seule » n'apparaît que si aucun des deux canaux n'a rien fait, et « la veille
+est complète » n'apparaît qu'après un échec.
+
+## Ce que l'exécution automatique ne peut pas garantir
+
+* **L'envoi à Discord n'a pas été vérifié.** Aucun test ne joint Discord, par la
+  même règle qui interdit tout accès au réseau. Le programme a été exécuté en
+  local, sa sortie est celle du cas A, et `data/` est resté identique à l'octet.
+  Ce qui n'est pas vérifié, c'est la réponse du serveur.
+* **Le secret est à créer par l'étudiant.** Rien dans le dépôt ne peut le créer :
+  le webhook se fait dans les paramètres du salon, puis le secret dans les
+  paramètres du dépôt. C'est la seule chose que cette version demande.
+* **Une URL de webhook ne doit jamais entrer dans le dépôt.** Elle donne le droit
+  d'écrire dans le salon, et une fois committée elle y reste, même effacée
+  ensuite. Un test vérifie que le workflow ne contient ni `discord.com/api/webhooks`
+  ni `discordapp.com/api/webhooks`, et qu'il lit `DISCORD_WEBHOOK` dans les
+  secrets.
+* **Rien n'a été exécuté sur GitHub.** Comme en V0.8 et V0.9.
+
+## Écarts
+
+* Le cahier des charges ne prévoit qu'un moyen de notification. Il y en a deux
+  maintenant, et le second est celui qui fonctionnera.
+* `MESSAGES_MAX` n'est pas dans le cahier. C'est un choix, il est mesuré, et ce
+  qui est écarté est compté.
+
+## Limites assumées
+
+* **La limite de 2 000 caractères n'est pas relue par le programme.** Elle est
+  écrite dans une constante, et c'est bien. Si Discord la change un jour, la
+  constante sera fausse : le code n'a aucun moyen de le savoir avant l'envoi, et
+  `raise_for_status` transforme l'erreur en une ligne de statut qui la nomme.
+* **Un message omis n'est pas renvoyé le lendemain.** Le programme ne garde que
+  ce qui a été montré, pas ce qui a été posté dans le salon. Ce qui dépasse le
+  plafond n'est dans le résumé d'étape que le temps de ce run.
+* **Le salon est un mur de texte le jour d'une grosse journée.** C'est le choix
+  explicite, pas un oubli.
+
+---
+
 # V1.0 - Version fonctionnelle
 
 ## Objectif

@@ -3,10 +3,12 @@
 Veille académique : recherche de programmes de Master et de financements
 correspondant à un profil, sur des sources officielles.
 
-Le projet en est à la **V0.5** : quatre sources sont extraites, la correspondance
+Le projet en est à la **V0.10** : quatre sources sont extraites, la correspondance
 avec le profil classe les opportunités et explique pourquoi, le résultat est
-écrit sur disque, et le programme **ne signale que ce qui n'a pas encore été
-montré**. Sur les 69 opportunités collectées, 9 correspondent au profil.
+écrit sur disque, le programme **ne signale que ce qui n'a pas encore été
+montré**, et cette veille tourne seule chaque jour à 07:00 UTC. Sur les 69
+opportunités collectées, 9 correspondent au profil. Le bulletin part par email
+et par un salon Discord, selon ce qui est configuré.
 Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 
 ## État réel
@@ -18,9 +20,11 @@ Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 | V0.3 | Correspondance avec le profil | fait, 9 retenues sur 69 |
 | V0.4 | Sauvegarde des résultats | fait, 69 fiches et 9 déjà vues |
 | V0.5 | Détection des nouveautés | fait, 9 signalées puis 0 au run suivant |
-| V0.6 | Notification | à faire |
-| V0.7 | Passage à l'échelle | à faire |
-| V0.8 | GitHub Actions | écrit et testé, **jamais exécuté sur GitHub** |
+| V0.6 | Notification par email | fait, 6 secrets optionnels |
+| V0.7 | Plusieurs sources | fait, 4 sources sans toucher au programme |
+| V0.8 | GitHub Actions | fait, **jamais exécuté sur GitHub** |
+| V0.9 | Veille automatique | fait, planification et plafond d'exécution |
+| V0.10 | Second canal de notification | fait, webhook Discord, **jamais exécuté sur GitHub** |
 
 Deux critères de la V0.3 ne sont pas implémentés, et ne le sont pas par oubli :
 aucune source ne renseigne de langue d'enseignement, et aucune ne publie de
@@ -130,10 +134,10 @@ pour fonctionner, et le workflow l'installe donc séparément.
 python -m pytest
 ```
 
-253 tests, environ deux secondes, **sans accès au réseau**. Ils vérifient la
+390 tests, environ cinq secondes, **sans accès au réseau**. Ils vérifient la
 sauvegarde, la correspondance avec le profil, ce que la veille affiche, la
-cohérence des deux fichiers de `data/`, les choix écrits du workflow, et
-l'encodage des fichiers du dépôt.
+cohérence des deux fichiers de `data/`, le découpage du bulletin pour Discord,
+les choix écrits du workflow, et l'encodage des fichiers du dépôt.
 
 Aucun test ne dépend d'une page vivante. Ce qui dépend d'un site est vérifié à
 la main et écrit dans `docs/SOURCES.md` : un test qui dépend d'un site étranger
@@ -185,6 +189,25 @@ nouveau.
 Les deux fichiers sont versionnés, parce qu'une veille qui recommence à zéro
 chaque jour ne sert à rien. Pour repartir de zéro, les vider ou les supprimer —
 en sachant que tout sera alors signalé comme nouveau.
+
+Le bulletin part aussi par Discord, si le secret `DISCORD_WEBHOOK` est posé.
+C'est un **webhook**, donc une URL qui donne le droit d'écrire dans un salon :
+elle se crée dans Discord, dans les paramètres du salon, et se met dans les
+secrets du dépôt comme les six autres. Elle ne doit jamais être écrite dans un
+fichier du dépôt. La marche à suivre complète est dans `docs/GITHUB_PYTHON.md`
+§12.
+
+Sans aucun secret, ce qui est le mode par défaut, le programme écrit quand même
+le bulletin sur la console et le dit :
+
+```text
+Notification : console seule, il manque SMTP_HOST, SMTP_PORT, SMTP_USER,
+SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO, Discord non configuré
+```
+
+Les cinq formes possibles de cette ligne sont dans `docs/VERSIONS.md` V0.10.
+C'est elle que le workflow recopie dans le résumé d'étape, et c'est la seule
+trace qu'un run automatique a réussi à notifier.
 
 Vérifier que les sources du registre sont réellement lisibles :
 

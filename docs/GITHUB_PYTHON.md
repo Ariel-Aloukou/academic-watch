@@ -333,13 +333,18 @@ token = "123456789abcdef"
 
 dans le dépôt GitHub.
 
-### Les six secrets de la veille
+### Les sept secrets de la veille
 
-Voici les six variables que le programme attend, et les valeurs exactes qu'il
-faut mettre. Les noms ne sont pas libres : ce sont ceux que `src/notifier.py`
-lit, et un test les compare avec le workflow. **Les six ensemble, ou pas du
-tout** — il en manque une, le programme reste en console et le dit, ce qui est
-le mode par défaut.
+Ils se répartissent en deux canaux, et c'est la seule chose à savoir :
+
+| Canal | Combien | Ensemble ou pas du tout |
+| ----- | ------- | ---------------------- |
+| email | six | oui, les six |
+| Discord | un | sans objet, il n'y en a qu'un |
+
+Les six de l'email sont lus **ensemble, ou pas du tout**. Il en manque une, le
+programme reste en console et le dit, ce qui est le mode par défaut. Le
+programme fonctionne avec l'un des deux canaux, l'autre, ou les deux.
 
 | Nom | Ce qu'on y met, pour une adresse Outlook | Exemple |
 | --- | --------------------------------------- | ------- |
@@ -349,6 +354,34 @@ le mode par défaut.
 | `SMTP_PASSWORD` | le mot de passe d'application, **pas** celui du compte | 16 caractères |
 | `EMAIL_FROM` | l'adresse qui envoie, la même que `SMTP_USER` | `etudiant@outlook.com` |
 | `EMAIL_TO` | l'adresse qui reçoit, où la vôtre | `etudiant@outlook.com` |
+
+### Le canal Discord : une variable de plus
+
+C'est le canal qui fonctionne sans Outlook, et il tient en une seule variable,
+`DISCORD_WEBHOOK`, dont la valeur est l'URL du webhook.
+
+Dans Discord, sur le salon oùira le bulletin :
+
+1. Ouvrir le salon, puis **Paramètres du salon > Intégrations > Webhooks** ;
+2. **Nouveau webhook**, lui donner un nom, puis **Copier l'URL** ;
+3. Coller cette URL comme valeur du secret `DISCORD_WEBHOOK`.
+
+Un piège à connaître : Discord refuse un nom de webhook qui contient `discord`
+ou `clyde`, quelle que soit la casse. *A webhook name is valid if: It does
+not contain the substrings `clyde` or `discord` (case-insensitive).* Un nom
+comme « veille Discord » sera refusé, et la création échoue sans raison
+évidente. `veille`, `academic watch` ou `veille etudes` passent.
+
+**Cette URL est un secret**, et c'est le point le plus contre-intuitif de tout
+ce guide : elle a l'air d'une adresse, mais quiconque la possède peut écrire
+dans le salon, autant de fois qu'il veut. Elle ne doit donc jamais être écrite
+dans le workflow, dans un fichier du dépôt, ni dans un message. Un test
+vérifie que le workflow ne contient aucune adresse de webhook en clair, et
+que la variable est lue dans les secrets.
+
+Elle est révocable : *Paramètres du salon > Intégrations > Webhooks*, puis
+supprimer le webhook. Le programme le verra au run suivant, qui nommera
+l'erreur dans sa ligne de statut.
 
 ### Où obtenir un mot de passe d'application
 
@@ -370,7 +403,7 @@ n'existe pas. Ce n'est pas une panne : c'est la conception de Microsoft.
 
 Dans le dépôt : **Settings > Secrets and variables > Actions > New repository
 secret**, une fois par variable, avec le nom exact du tableau ci-dessus. Six
-secrets, six fois l'opération.
+fois l'opération pour l'email, une fois pour Discord.
 
 Ces noms de menus sont ceux de l'interface de GitHub, qui est en anglais. Ils
 ne se trouvent pas dans une version française, et c'est le premier endroit où
@@ -378,8 +411,9 @@ l'on peut bloquer un après-midi.
 
 Ils sont passés au programme par `env`, jamais dans la ligne de commande, et le
 workflow fonctionne sans aucun d'eux. Pour vérifier, lancer le workflow
-**manuellement** : le résumé d'étape dit `Notification : email envoyé ...` ou
-nomme le secret qui manque.
+**manuellement**, et lire la ligne `Notification` dans le résumé d'étape : elle
+nomme ce que chaque canal a fait, et le secret qui manque. Les formes
+possibles sont dans `docs/VERSIONS.md` V0.10.
 
 ---
 
