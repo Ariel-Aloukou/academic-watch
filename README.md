@@ -3,7 +3,7 @@
 Veille académique : recherche de programmes de Master et de financements
 correspondant à un profil, sur des sources officielles.
 
-Le projet en est à la **V0.11** : cinq sources sont extraites, la correspondance
+Le projet en est à la **V0.12** : cinq sources sont extraites, la correspondance
 avec le profil classe les opportunités et explique pourquoi, le résultat est
 écrit sur disque, le programme **ne signale que ce qui n'a pas encore été
 montré**, et cette veille tourne seule chaque jour à 07:00 UTC. Sur les 110
@@ -26,6 +26,7 @@ Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 | V0.9 | Veille automatique | fait, planification et plafond d'exécution |
 | V0.10 | Second canal de notification | fait, webhook Discord, **message reçu dans le salon** |
 | V0.11 | Cinquième source | fait, NTNU, 5 sources, 110 opportunités, 12 retenues |
+| V0.12 | Sixième source, refusée | fait, MEXT mesurée puis refusée, critère `international` élargi |
 
 Deux critères de la V0.3 ne sont pas implémentés, et ne le sont pas par oubli :
 aucune source ne renseigne de langue d'enseignement, et aucune ne publie une
@@ -33,6 +34,16 @@ date limite exploitable. NTNU en publie une, `1 March`, sans l'année : une date
 sans année n'est pas une date. C'est vérifié page par page, pas supposé ;
 `docs/SOURCES.md` §6.3 distingue ce qui a été mesuré négatif de ce qui n'a pas
 pu être lu.
+
+**Deux défauts sont mesurés, documentés et non corrigés.** Ils sont venus de
+la tentative d'ajouter une sixième source, MEXT, qui a été refusée. Le premier :
+le critère `niveau` accorde 40 points à toute éligibilité contenant le mot
+« graduate », donc à des sortants de lycée ; il a produit 4 faux positifs sur 8
+phrases testées, et il n'a rien corrompu dans le bulletin actuel. Le second :
+`fetch_page` suit l'en-tête `Content-Type` et non la page, donc une source qui
+ne déclare pas son charset est lue de travers — les cinq sources actives
+déclarent toutes le leur, ce qui masque la panne. Les deux sont écrits en
+entier dans `docs/VERSIONS.md` V0.12, avec les chiffres.
 
 Le programme télécharge les pages au moment de l'exécution et **écrit deux
 fichiers** dans `data/` : l'historique complet et la mémoire de ce qui a déjà

@@ -296,21 +296,113 @@ registre et applique les cinq verdicts décrits en §1.3. Elles datent du dernie
 exécution : un portail peut changer d'une semaine à l'autre, c'est pourquoi le
 test est exécutable et non figé dans ce document.
 
+La colonne « Verdict » est donc celle du validateur, et elle ne dit pas si une
+source est **implémentée**. MEXT en est l'exemple : le validateur la classe
+`Exploitable` le 27 septembre, et la mesure du 29 septembre la refuse pour
+trois raisons mesurées, dont une qui n'est pas dans la page mais dans le code
+(§3.1 et §6.4). Un verdict de validateur dit qu'une page répond et contient
+des données ; il ne dit pas qu'on sait les lire.
+
 ## 3.1 Détail des verdicts
 
-### Study in Japan – MEXT : la seule source exploitable
+### Study in Japan – MEXT : mesurée le 29 septembre 2026, puis refusée
 
 `https://www.studyinjapan.go.jp/en/planning/scholarships/mext-scholarships/`
 
-Contient 3 tableaux statiques : montants mensuels, frais de scolarité, frais
-d'examen, deux voies de candidature.
+La mesure confirme le volume relevé par le validateur et corrige sa lecture de
+la structure. 200, **29 023 octets, 28 825 caractères** — la page ne contient
+aucun CRLF, donc les deux lectures concordent —, 9 `<script>`, 104 `<a>`, 3
+`<table>`, 23 `<tr>`, 30 `<th>`, 55 `<td>`, 1 `<h1>`, 5 `<h3>`, 6 `<dt>`.
 
-Limite : c'est une page de **description de bourse**, pas une liste de
-programmes. Elle documentera le financement, pas les études.
+Ce n'est pas une liste de programmes : c'est **une bourse, déclinée en 7
+types** — `Research students`, `Teacher training students`, `Undergraduate
+students`, `Japanese studies students`, `College of technology students`,
+`Specialized training college students`, `Young Leaders Program (YLP)
+students`. Pour un candidat au Master, **un seul** de ces sept est pertinent.
 
-Point de vigilance : la candidature passe par l'ambassade du Japon dans le pays
-d'origine ou par la recommandation de l'université. **La voie applicable à un
-candidat ivoirien reste à vérifier** avant d'extraire cette information.
+Deux tableaux portent l'information, et ils ne se lisent pas de la même
+façon.
+
+* Le tableau d'**éligibilité** (`table.table_type2`) a les types en
+  **lignes** : 7 lignes, une par type, le nom dans la première cellule, la
+  condition dans la seconde. C'est le seul bloc de la page qu'un sélecteur CSS
+  peut lire ;
+* le tableau des **montants** a les types en **colonnes** : 8 colonnes
+  déclarées, `Tuition` → `Exempted` avec `colspan=7` — donc les 7 types —
+  mensualité `¥143,000 à ¥145,000` en `colspan=2`, `¥117,000` en
+  `colspan=4`, `¥242,000` en `colspan=1`. Un sélecteur travaille ligne par
+  ligne : il ne peut pas associer un montant à un type. La page écrit la plage
+  avec un tilde de pleine largeur ; il est remplacé ici par « à », parce que
+  `tests/test_proprete.py` interdit les caractères de pleine largeur dans le
+  dépôt. Les valeurs sont recopiées après réparation du charabia, que le
+  paragraphe sur l'encodage plus bas explique.
+
+#### Les cinq lectures, et ce qu'elles donnent
+
+Les 7 types ont été mis en mémoire avec le texte exact de la page relue
+sur disque, puis passés au vrai `evaluer` du projet. Cinq lectures, de la plus
+fidèle à la plus flatteuse. **Aucune n'écrit dans `config/` ni dans
+`data/`.**
+
+| Lecture | Ce qu'elle ajoute | Retenues | Score |
+| ------- | ----------------- | -------- | ----- |
+| A | titre + éligibilité publiées, rien de plus | **0 / 7** | 55/100 |
+| B | A + les montants publiés | **0 / 7** | 65/100 |
+| C | B + la phrase négative de la page en `description` | 6 / 7 | 90/100 |
+| D | B + la phrase d'ouverture de la page, code élargi | 6 / 7 | 90/100 |
+| E | D, en ne gardant que le type utile | 1 / 1 | 90/100 |
+
+Les lectures C et D sont les seules qui retiennent, et **elles retiennent
+faux**. Sur 7 types, 6 passent à 90/100, dont :
+
+* `Undergraduate students` — moins de 25 ans, 12 années de scolarité ;
+* `Teacher training students` — déjà diplômé et 5 ans d'expérience
+  d'enseignement, les enseignants en poste étant exclus ;
+* `College of technology students` — 11 ans de scolarité, moins de 25 ans ;
+* `Specialized training college students` — 12 années de scolarité ;
+* `Young Leaders Program (YLP) students` — diplômés avec expérience
+  professionnelle, moins de 40 ans.
+
+90/100 est le meilleur score qu'une bourse puisse obtenir. Ces cinq fausses
+entrees arriveraient donc **en tête de bulletin**.
+
+#### Les trois raisons du refus
+
+**Un bloc de sélecteurs ne peut rien produire.** Les 7 lignes
+d'éligibilité n'ont **aucun lien**, or `build_opportunity` (src/scraper.py)
+écarte toute opportunité sans URL. Un bloc de sélecteurs ne sait pas non
+plus remplir `eligibility` ni `funding_type`, et `mesure_niveau` lit
+`eligibility` : même avec un `title` correctement rempli, `niveau` vaut 0/40
+et rien n'est retenu. Il faudrait un parseur dédié, donc du code.
+
+**Le code la lirait de travers.** Le serveur répond
+`Content-Type: text/html` **sans charset** ; `requests` retombe alors sur
+`ISO-8859-1`, alors que la page est en UTF-8 (`charset="UTF-8"` déclaré
+dans le HTML, `apparent_encoding` vaut `utf-8`). `fetch_page` renvoie
+`response.text`, qui suit l'en-tête et non la page : première divergence
+au caractère 617, où le `|` du titre `Scholarship | Study in Japan` — que la
+page écrit en pleine largeur, donc interdit par tests/test_proprete.py —
+devient illisible, et les montants arriveraient en `Â¥143,000`. Les cinq
+sources actives déclarent toutes leur charset, ce qui masque la panne ; elle
+toucherait toute source future qui n'en déclare pas.
+
+**Le critère `niveau` retiendrait cinq fausses bourses.** C'est la raison
+décisive, et elle ne vient pas de MEXT : elle est dans le code et elle
+toucherait la prochaine bourse ajoutée. Le détail et les 4 faux positifs
+mesurés sont dans docs/VERSIONS.md V0.12.
+
+#### Ce que la page publie malgré tout
+
+Elle est la meilleure source de financement du registre, et son contenu
+serait apprécié. Pour un `Research students` : **145,000 ¥ par mois**,
+**frais de scolarité exonérés**, **billet d'avion aller-retour pris en
+charge**, éligibilité « under 35 years of age and be eligible for
+admission to a master's program ». Un parseur les produirait en
+`funding_type`, pour 10/20 seulement — `Exempted` n'appartient pas à
+`FINANCEMENT_COMPLET` — mais `niveau` vaudrait 40/40 et `international` 25/25.
+
+Le blocage est donc la lecture, pas la source. MEXT sera reprenable après les
+deux corrections de code, et elle vaudra alors le travail.
 
 ### EduCanada : un moteur de recherche, mais une exception à ne pas ignorer
 
@@ -408,7 +500,7 @@ elles répondaient `HTTP 412` les quatre fois le 27 septembre, et Campus China n
 répondait plus du tout deux jours plus tôt, sur quatre tentatives et sur les deux
 schémas. La sortie de `src/scraper.py` fait foi sur l'état du jour.
 
-Trois nuances que le tableau ne montre pas :
+Quatre nuances que le tableau ne montre pas :
 
 * **Les deux sources chinoises ne sont pas exploitables, quel que soit le
   verdict affiché.** `bloque` signifie qu'un script ne passe pas, `injoignable`
@@ -427,6 +519,14 @@ Trois nuances que le tableau ne montre pas :
 * **EduCanada – Bourses ressort `exploitable`** grâce à un lien de fiche réel
   (`bcdi2030.aspx`) que l'inspection manuelle avait raté. Les deux pages
   EduCanada ne se valent pas.
+
+* **MEXT est `exploitable` au validateur et refusée à la mesure.** C'est le
+  seul cas du registre où les deux réponses divergeient, et il est instructif :
+  le validateur voit 3 tableaux, il ne voit pas que les types y sont en
+  colonnes, que les 7 lignes d'éligibilité n'ont aucun lien, ni que le
+  critère `niveau` retiendrait cinq fausses bourses. `exploitable` signifie
+  « la page répond et contient des données », pas « on sait la lire ». Voir
+  §3.1 et §6.4.
 
 Sur les 12 sources du registre d'origine, une seule est directement
 exploitable. C'est un résultat décevant mais il vaut mieux le savoir maintenant :
@@ -489,18 +589,26 @@ Ces colonnes viennent du validateur, qui compte les tableaux et les liens de
 fiche. Elles annoncent ce qu'il faut aller vérifier, pas ce qui est acquis.
 
 NTNU en est sortie : elle est implémentée depuis la V0.11 et sa colonne est
-au §6.1. Le tableau ci-dessous annonçait `degree: oui` et `language: oui` pour
-elle ; la mesure donne 0/41 sur les deux.
+au §6.1. MEXT en est sortie aussi, dans l'autre sens : elle a été
+mesurée le 29 septembre 2026 puis refusée, et le tableau §6.4 dit ce
+qu'elle publie. Le tableau ci-dessous annonçait pour elle `degree: non` et
+`language: oui` ; la mesure confirme `degree` à 0 et ajoute deux corrections :
+elle publie bien une `eligibility`, et elle ne publie aucune langue
+d'enseignement.
 
-| Information | UBC | MEXT |
-| ----------- | --- | ---- |
-| `title` | oui | oui |
-| `degree` | oui | non |
-| `field` | à déduire | non |
-| `deadline` | **non** | **non** |
-| `funding` | à vérifier | non |
-| `language` | à vérifier | oui |
-| `eligibility` | non | oui |
+Il annonçait aussi `title: oui`, ce qui est exact mais trompeur : les 7
+lignes n'ont aucun lien, et une opportunité sans URL est écartée. 7 titres
+lisibles ne valent pas 7 opportunités.
+
+| Information | UBC |
+| ----------- | --- |
+| `title` | oui |
+| `degree` | oui |
+| `field` | à déduire |
+| `deadline` | **non** |
+| `funding` | à vérifier |
+| `language` | à vérifier |
+| `eligibility` | non |
 
 ## 6.3 La deadline : mesurée, pas supposée
 
@@ -653,6 +761,31 @@ l'infrastructure est un sujet qu'il suit. Ces correspondances contextuelles
 sont signalées comme telles dans les raisons, ce qui permet de les voir et de
 les écarter d'un regard. Ne pas les « corriger » en retirant les termes : ce
 serait supprimer une décision du profil à cause d'un classement imparfait.
+## 6.4 Mesuré, sur une source validée puis refusée
+
+MEXT est la seule source dans ce cas : validée par le validateur de
+config/sources.json, mesurée à la main, puis refusée. Les chiffres ci-dessous
+sont ceux d'un parseur dédié fonctionnant, pas ceux d'un bloc de
+sélecteurs, qui ne peut pas produire la moindre opportunité (voir §3.1).
+
+| Information | MEXT (7) | Comment |
+| ----------- | -------- | ------- |
+| `title` | 7/7 | 1re cellule de la ligne |
+| `url` | 7/7 | adresse de la page, seul lien disponible |
+| `eligibility` | 7/7 | 2e cellule de la ligne |
+| `funding_type` | 7/7 | `Tuition` → `Exempted`, `colspan=7` |
+| `university` | config | config |
+| `country` | config | config (Japon, pays préféré) |
+| `degree` | 0/7 | non publié séparément |
+| `field` | 0/7 | non publié : ni filière ni domaine |
+| `description` | 0/7 | la page n'a pas de résumé par type |
+| `deadline` | 0/7 | aucune date, même sans année |
+| `language` | 0/7 | les examens sont en japonais et en anglais, pas la langue d'enseignement |
+
+Les montants mensuels, eux, ne sont pas dans ce tableau : ils sont en
+`colspan` dans un tableau où les types sont en colonnes, donc ils exigent un
+calcul d'indice. `funding_type` les remplace ici par la seule information que
+`mesure_financement` sait lire, ce qui donne 10/20 et non 20/20.
 
 ---
 

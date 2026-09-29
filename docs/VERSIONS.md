@@ -1692,6 +1692,254 @@ seront donc annoncées au premier run sur GitHub.
 
 ---
 
+# V0.12 - Une source refusée, et deux défauts trouvés en la cherchant
+
+## Objectif
+
+Ajouter une source, comme la V0.11. La source retenue à l'époque était
+MEXT, la seule source exploitable de la catégorie 2. Elle a été mesurée,
+elle est **refusée**, et la mesure a découvert deux défauts du code qui
+n'allaient pas à la source.
+
+Deux décisions de l'étudiant, prises avant l'écriture :
+
+* le refus de MEXT a été acté, et son écriture dans docs/SOURCES.md
+  (§3.1, §5, §6.2, §6.4) fait partie de cette version ;
+* le critère `international` doit accepter les autres façons de dire
+  « ouvert aux étudiants étrangers ». C'est la seule correction de code de
+  cette version, et elle est écrite plus bas.
+
+## La mesure de MEXT
+
+`https://www.studyinjapan.go.jp/en/planning/scholarships/mext-scholarships/`
+
+Mesurée le 29 septembre 2026, en plusieurs passes, sur le HTML téléchargé
+puis relu **en octets**. La page fait 29 023 octets et 28 825 caractères : elle
+ne contient aucun CRLF, donc une lecture par `read_text()` donnerait le même
+nombre. La différence de 198 est le nombre de caractères multi-octets, et non
+un écart de fins de ligne. Le piège existe ailleurs — la page NTNU perd 11
+caractères ainsi — mais il ne joue pas ici, et l'écart de 11 n'a pas été
+reporté d'une page à l'autre.
+
+| Mesure | Valeur |
+| ------ | ------ |
+| réponse | 200 |
+| longueur | 28 825 caractères |
+| `<table>` / `<tr>` / `<th>` / `<td>` | 3 / 23 / 30 / 55 |
+| `<a>` / `<script>` / `<h1>` / `<h3>` / `<dt>` | 104 / 9 / 1 / 5 / 6 |
+| types de bourse | **7** |
+| liens dans les 7 lignes d'éligibilité | **0** |
+| occurrence de « international » dans l'éligibilité | **0** |
+| occurrence de « international » dans la page | 2, dont une négative |
+
+C'est **une bourse déclinée en 7 types**, pas une liste de programmes, et un
+seul des sept concerne un candidat au Master.
+
+Les deux tableaux ne se lisent pas de la même manière, et c'est le point
+qui a décidé du refus :
+
+* le tableau d'éligibilité (`table.table_type2`) a les types en **lignes**,
+  7 lignes, une par type. C'est le seul bloc lisible par un sélecteur CSS ;
+* le tableau des montants a les types en **colonnes**, 8 colonnes déclarées.
+  `Tuition` → `Exempted` porte `colspan=7`, donc couvre les 7 types. Un
+  sélecteur travaille ligne par ligne : il ne peut pas associer un montant
+  à un type.
+
+## Les cinq lectures
+
+Les 7 types ont été mis en mémoire avec le texte exact de la page, puis
+passés au vrai `evaluer`. **Aucune écriture dans `config/` ni dans `data/`.**
+
+| Lecture | Ce qu'elle ajoute | Retenues | Score |
+| ------- | ----------------- | -------- | ----- |
+| A | titre + éligibilité publiées | **0 / 7** | 55/100 |
+| B | A + montants publiés | **0 / 7** | 65/100 |
+| C | B + la phrase négative en `description` | 6 / 7 | 90/100 |
+| D | B + la phrase d'ouverture, code élargi | 6 / 7 | 90/100 |
+| E | D, en gardant le type utile | 1 / 1 | 90/100 |
+
+Seules C et D retiennent, et **elles retiennent faux** : sur 6 retenues, une
+seule est une bourse de Master. 90/100 étant le maximum d'une bourse, les cinq
+fausses arriveraient en tîte de bulletin. C'est la mesure qui a fait décider
+le refus, et non une préférence pour la complexité.
+
+## Défaut 1, corrigé : `international` était trop strict
+
+`mesure_international` exigeait le mot `international`. La page MEXT ne l'écrit
+jamais au sujet de la bourse : elle écrit
+
+```text
+recruit scholarship candidates based on their student-exchange agreements
+with schools overseas
+```
+
+Le mot est à la ligne 396, dans une phrase positive, et il décrit la
+population visée. Exiger `international` écartait donc une bourse
+entièrement ouverte. C'est le défaut miroir de celui corrigé en V0.3, où
+`international students` était lu comme `national student` : là on confondait
+une formule avec son contraire, ici on ignorait une formule équivalente.
+
+La correction tient en une constante et une ligne :
+
+```python
+OUVERTURE_INTERNATIONALE = ("international", "overseas", "foreign students")
+```
+
+et `mesure_international` teste les trois formes au lieu d'une seule.
+
+**Sept tests nouveaux, dont un qui n'existait pas avant.** Une liste de mots
+peut contenir une entrée morte — une faute de frappe qu'aucun test
+n'exercerait, et le code la porterait sans qu'on le sache. Le test
+`test_chaque_formule_de_liste_a_sa_phrase_reelle` compare les deux ensembles
+et impose qu'ils soient égaux : ni mot inutilisé, ni phrase testée qui ne
+soit pas dans la liste. Chaque forme a en outre sa phrase réelle, ce qui
+empêche d'ajouter un mot jamais vérifié.
+
+Deux tests gardent l'ordre des règles : une restriction nationale l'emporte
+sur `overseas`, et une bourse qui ne publie rien de ce côté reste écartée.
+Le second est celui qui protège le jour où quelqu'un ajouterait un mot trop
+large.
+
+**Ce que la correction ne change pas, mesuré sur les 110 opportunités
+réellement collectées** : 12 retenues avant, 12 après, **0 gagnée, 0 perdue**.
+L'élargissement est donc inerte aujourd'hui. Il ne prépare pas MEXT : il
+supprime une raison de l'écarter, et laisse les deux autres.
+
+## Défaut 2, mesuré et non corrigé : `niveau` est trop permissif
+
+C'est le défaut décisif, et il ne vient pas de MEXT.
+
+`variantes("graduate")` produit `{graduate, graduates}`, et `contient_mot`
+cherche `graduates?`. Toute phrase contenant « graduate » vaut donc 40
+points de niveau Master. Le cas qui devait être protégé — « undergraduate »
+contre « graduate » — est protégé ; le pluriel, non.
+
+Mesuré sur 8 phrases d'éligibilités réelles, dont 6 recopiées de
+MEXT :
+
+| Éligibilité | Attendu | Obtenu |
+| --------------- | ------- | ------ |
+| « under 25 years of age and have completed 12 years of school education (includes prospective graduates) » | 0/40 | **40/40** |
+| « includes prospective graduates, or have completed courses in a school comparable to a Japanese high school » | 0/40 | **40/40** |
+| « a graduate of a college or teacher training college … at least five years of active experience as a teacher » | 0/40 | **40/40** |
+| « university or college graduates who have practical work experience, young public administrators » | 0/40 | **40/40** |
+| « transfer to the third year of College of technology » | 0/40 | 0/40 |
+| « eligible for admission to a master's program or a doctoral program » | 40/40 | 40/40 |
+| « Graduate school level, major in field of specialty » | 40/40 | 40/40 |
+| « open to students who have completed a first cycle higher education » | 40/40 | 0/40 |
+
+Quatre faux positifs et un faux négatif sur huit. Le dernier est un
+manque de vocabulaire, moins grave : une formule non prévue donne 0, ce qui
+écarte par prudence. Les quatre autres donnent 40, ce qui retient par erreur.
+
+**Le bulletin actuel n'est pas corrompu.** Sur les 69 fiches de
+`data/opportunities.json`, une seule contient le motif, `KAIST Scholarship`,
+dont le texte est « Open to international applicants for KAIST graduate
+programs ». Elle est retenue à juste titre — une bourse de KAIST pour des
+étudiants de Master — mais elle passe par `graduate` et non par `master`.
+C'est un vrai positif atteint par hasard, et il faut le dire : le nombre
+`12` est bon, la raison ne l'est pas.
+
+Le défaut est **latent**, pas actif. Il le deviendrait à la prochaine bourse
+ajoutée, et MEXT est la prochaine. Le corriger demande de décider ce que vaut
+« graduate » isolé, ce qui n'appartient pas à cette version. Il est mesuré,
+documenté, et laissé en place.
+
+## Défaut 3, mesuré et non corrigé : l'encodage suit l'en-tête, pas la page
+
+`fetch_page` renvoie `response.text`. Cette propriété de `requests` ne lit
+pas la page : elle lit l'en-tête `Content-Type`, et pour un `text/html` sans
+charset elle retombe sur `ISO-8859-1`.
+
+| Source | `Content-Type` | `requests` lit | La page est |
+| ------- | -------------- | -------------- | ----------- |
+| MEXT | `text/html` | **ISO-8859-1** | UTF-8 (`charset="UTF-8"` déclaré) |
+| NTNU | `text/html;charset=UTF-8` | UTF-8 | UTF-8 |
+
+Les deux lectures de la page MEXT divergent au caractère 617, et les
+montants s'y lisent `Â¥143,000`. Les cinq sources actives déclarent toutes
+leur charset : **personne n'a jamais vu la panne**, et elle toucherait toute
+source future qui n'en déclare pas.
+
+La page porte en outre un double encodage : le mot japonais du sélecteur de
+langue arrive sous la forme de six caractères latins accentés, là où il
+devrait y en avoir trois. Les caractères CJK ne sont pas recopiés ici, car
+`tests/test_proprete.py` les interdit dans le dépôt. C'est un détail : le
+double encodage se répare, l'en-tête manquant, non. Ce défaut est dans le
+serveur, pas dans le projet, et le projet doit y être prêt.
+
+## État mesuré
+
+Mesuré le 29 septembre 2026, avec la suite complète et une collecte réelle.
+
+| Mesure | Avant | Après |
+| ------ | ----- | ------ |
+| opportunités collectées | 110 | 110 |
+| correspondant au profil | 12 | 12 |
+| retenues gagnées par l'élargissement | — | **0** |
+| retenues perdues | — | **0** |
+| tests | 390 | **397** |
+| lignes ajoutées ou modifiées dans `src/` | — | 20 ajoutées, 1 retirée |
+
+La comparaison des deux critères a été faite sur **les mêmes
+opportunités**, la liste remettue à sa valeur d'hier le temps du calcul.
+Collecter deux fois aurait introduit le jour de la journée dans la mesure, et
+la seule variable doit être le code.
+
+`collect_opportunities()` a été appelé seule, sans `sauvegarder` ni
+`conserver_vus` : elle collecte et rend, elle n'écrit pas. `data/` n'a donc
+pas été touché, et aucune restitution n'a été nécessaire. C'est
+la différence entre une mesure et une veille, et c'est ici qu'elle compte.
+
+## Ce que cette version ne change pas
+
+* **Aucun `config/`.** `config/sources.json` et `config/selectors.json` sont
+  intacts : MEXT n'est pas ajoutée, donc rien à activer. Le compte des
+  sources reste 19 inscrites, 17 activées, 5 avec un bloc, 12 activées sans
+  bloc, et la ligne de journal
+  ```text
+  Sources sans sélecteurs : 12 activées et non lues, voir docs/SOURCES.md §8.
+  ```
+  reste identique ;
+* **Aucun des deux canaux de notification.** Le bulletin du prochain run est
+  le même qu'il aurait été sans cette correction, et c'est mesuré ;
+* **Aucun test modifié.** Les 7 nouveaux tests sont ajoutés, aucun
+  n'attendu. Un test qui aurait dû changer aurait signale qu'il comptait un
+  nombre au lieu d'une propriété.
+
+## Écarts
+
+* La règle de §9 n'a pas été suivie jusqu'au bout, et c'est délibéré :
+  les étapes 7 à 9 — écrire les sélecteurs, mesurer le remplissage,
+  activer — n'ont pas lieu, parce que la mesure a montré qu'aucun bloc de
+  sélecteurs ne peut rien produire. Activer une source dont la mesure dit
+  qu'elle ne fonctionne pas aurait été l'inverse de la règle.
+
+## Limites assumées
+
+* **Le défaut `niveau` reste en place.** C'est le plus grave des trois et il
+  est mesuré. Il ne corrompt pas le bulletin d'aujourd'hui, et il
+  corrompra la prochaine bourse ajoutée si elle est lue par des sélecteurs.
+  Le corriger est une décision à prendre, pas une décision à prendre vite ;
+* **`fetch_page` lit toujours l'en-tête.** Une source sans charset sera
+  lue de travers, silencieusement. C'est le défaut le plus gênéral : il
+  touche toute source future, pas seulement MEXT ;
+* **La liste `OUVERTURE_INTERNATIONALE` est large par construction.** « overseas »
+  dit d'où l'étudiant vient, pas qu'il est accepté, et le code ne comprend pas
+  la négation. Une bourse écrite « reserved for students who studied overseas »
+  serait comptée comme ouverte. Le risque n'est pas théorique : il est mesuré
+  sur la page même qui a motivé la correction, où « overseas » apparaît
+  **4 fois**, dont une dans une note de bas de tableau qui parle des
+  *organismes* recommandants et non des étudiants. C'est le prix d'une règle
+  par mots, et il est écrit dans le commentaire de la constante plutôt que
+  caché ;
+* **La périodicité de MEXT n'est pas contrôlée.** 28 825 caractères
+  et 7 types le 29 septembre 2026, c'est une mesure du jour. Une source
+  refusée ne se surveille pas, donc la page peut changer sans que rien ne
+  s'en aperçoive.
+
+---
+
 # V1.0 - Version fonctionnelle
 
 ## Objectif
