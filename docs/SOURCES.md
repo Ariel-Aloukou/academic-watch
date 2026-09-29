@@ -114,20 +114,48 @@ sait pas encore les lire.
 | --- | --- |
 | URL | `https://www.ntnu.edu/studies/international/master` |
 | Type | Liste des Masters en anglais + Erasmus Mundus |
-| Mesures | 200, 94 713 car., 3 tableaux, aucun JavaScript |
-| Statut | **Validée** |
+| Mesures | 200, 94 713 car., 3 tableaux, 41 lignes de programme |
+| Statut | **Implémentée en V0.11** |
 
-Correspondance avec le profil : excellente.
+Correspondance avec le profil : **3 lignes sur 41**, mesurées le 29 septembre
+2026 avec le code de production.
 
-* `Digital Infrastructure and Cyber Security` ;
-* `Cybersecurity and Assurance` (Erasmus Mundus) ;
-* `Engineering and ICT`.
+| Programme | Score | D'où il vient |
+| --------- | ----- | ------------- |
+| `Information Security` | 65/100 | tableau 0, ligne 16 |
+| `Cybersecurity and Assurance (CYBERSURE)` | 65/100 | tableau 2, ligne 37, Erasmus Mundus |
+| `Digital Infrastructure and Cyber Security` | 45/100 | tableau 0, ligne 6 |
+
+Les 38 autres lignes sont lues, comprises et écartées : leurs titres ne
+contiennent aucun terme du profil. Ce n'est pas un défaut de lecture, c'est un
+domaine qui n'est pas celui de l'étudiant.
+
+**Une affirmation de cette section était fausse.** La version précédente citait
+`Engineering and ICT` parmi les programmes correspondants. Ce nom n'existe pas
+dans les 41 lignes : c'est une faculté de NTNU, pas un programme. Les quatre
+titres qui contiennent le mot *Engineering* sont `Electric Power Engineering`,
+`Materials Science and Chemical Engineering`, `Cold Climate Engineering` et
+`Coastal and Marine Energy Engineering - CoMEM+`. Une correspondance affirmée
+lue à l'œil vaut moins qu'un compte : le compte est 3.
 
 La page distingue les programmes ouverts aux candidats non UE/EEE de ceux
 réservés aux candidats UE/EEE. C'est exactement la distinction utile pour un
 candidat ivoirien.
 
-Limite : les dates limites ne sont pas dans la page de liste.
+Deux limites, mesurées :
+
+* **`degree` n'est publié sur aucune ligne.** La page s'appelle « Master's
+  programmes in English » et sa section « International Master's programmes »,
+  mais le diplôme n'est écrit ni dans la ligne ni dans le titre. Le critère
+  `diplome` retombe donc sur le titre, qui ne dit pas « Master », et affiche
+  `titre Information Security, hors de la liste visée`. Les trois
+  opportunités perdent 20 points et plafonnent à 65 sur 100. Elles restent
+  retenues : seul `domaine` est bloquant. Le programme ne peut pas y remédier,
+  `degree` se lit dans la ligne et jamais dans la source ;
+* **une deadline est publiée, sans l'année.** Le deuxième tableau s'intitule
+  `Deadline` et ne contient qu'une ligne, `Cold Climate Engineering — 1 March`.
+  Une date sans année n'est pas une date, elle n'est donc pas extraite. C'est la
+  conclusion que §6.2 annonçait déjà pour cette source, et elle se confirme.
 
 ### KAIST (Corée du Sud)
 
@@ -142,9 +170,26 @@ Programmes :
 Contient notamment une `Graduate School of Information Security`, ainsi que des
 domaines réseau et télécommunications. Correspondance excellente.
 
-La page est un accordéon statique : 5 collèges, 36 programmes, sans aucun
-JavaScript. Les sélecteurs sont dans `config/selectors.json`, et le remplissage
-a été mesuré :
+La page est un accordéon statique : 5 collèges, 36 programmes. Mesuré le
+29 septembre 2026, la réponse du serveur contient **16 balises `<script>`**, dont
+13 chargent un fichier — `bootstrap.bundle.min.js`, `jquery.js`, `jstree.min.js`
+et l'internationalisation. La phrase précédente de cette section disait « sans
+aucun JavaScript » : c'était faux, et c'était faux exactement comme pour NTNU,
+quelques lignes plus haut.
+
+Ce qui est vrai, et mesuré : **les 36 programmes sont dans le HTML statique.**
+La veille les lit sans navigateur, donc sans exécuter un seul script, et le
+compte 36 du tableau ci-dessous vient de là. Les scripts servent à l'accordéon,
+à la traduction et aux icônes, pas à la liste.
+
+Le validateur ne compte d'ailleurs pas les balises `script` : il cherche quatre
+marqueurs d'hydratation de framework, `__NUXT__`, `__NEXT_DATA__`,
+`data-reactroot` et `ng-version`, et il n'en trouve aucun ici. C'est pourquoi il
+classe cette source `a_tester` et non `exploitable` : non à cause du
+JavaScript, mais parce qu'elle ne présente ni tableau ni lien de fiche.
+
+Les sélecteurs sont dans `config/selectors.json`, et le remplissage a été
+mesuré :
 
 | Information | Sélecteur | Remplissage |
 | ----------- | --------- | ----------- |
@@ -164,7 +209,9 @@ Trois limites assumées :
 * les 10 programmes sans domaines de recherche gardent `field: None`. C'est
   exact, la page ne les publie pas (docs/README.md §7) ;
 * le lien est le **site du département** (`https://gsis.kaist.ac.kr/`), pas une
-  fiche de programme comme chez TUM. La notificationyclique moins précisément ;
+  fiche de programme comme chez TUM. La notification vise donc un département
+  entier plutôt qu'un programme : moins précise, mais c'est ce que la page
+  publie ;
 * le **collège** (Natural Sciences, Life Science, Engineering, Liberal Arts,
   Business) n'est pas extractible : les 5 `<h4>` sont frères du `<ul>` parent,
   hors de portée d'un sélecteur descendant. Aucun parseur dédié n'a été écrit
@@ -398,28 +445,35 @@ validateur pour une source pas encore lue.
 
 Ces chiffres viennent d'une exécution réelle, pas d'une inspection visuelle.
 
-| Information | TUM (10) | KAIST programmes (36) | KAIST bourses (3) | EACEA (20) |
-| ----------- | -------- | --------------------- | ----------------- | ---------- |
-| `title` | 10/10 | 36/36 | 3/3 | 20/20 |
-| `university` | config | config | config | config |
-| `country` | config | config | config | config |
-| `degree` | 10/10 | 36/36 | 0/3 | 0/20 |
-| `field` | 0/10 | 26/36 | 0/3 | 0/20 |
-| `description` | 10/10 | 0/36 | 3/3 | 20/20 |
-| `url` | 10/10 | 36/36 | 3/3 | 20/20 |
-| `source` | 10/10 | 36/36 | 3/3 | 20/20 |
-| `deadline` | 0/10 | 0/36 | 0/3 | **0/20** |
-| `funding_type` | 0/10 | 0/36 | 3/3 | 0/20 |
-| `language` | 0/10 | 0/36 | 0/3 | 0/20 |
-| `eligibility` | 0/10 | 0/36 | 3/3 | 0/20 |
+| Information | TUM (10) | KAIST programmes (36) | KAIST bourses (3) | EACEA (20) | NTNU (41) |
+| ----------- | -------- | --------------------- | ----------------- | ---------- | --------- |
+| `title` | 10/10 | 36/36 | 3/3 | 20/20 | 41/41 |
+| `university` | config | config | config | config | config |
+| `country` | config | config | config | config | config |
+| `degree` | 10/10 | 36/36 | 0/3 | 0/20 | 0/41 |
+| `field` | 0/10 | 26/36 | 0/3 | 0/20 | 0/41 |
+| `description` | 10/10 | 0/36 | 3/3 | 20/20 | 0/41 |
+| `url` | 10/10 | 36/36 | 3/3 | 20/20 | 41/41 |
+| `source` | 10/10 | 36/36 | 3/3 | 20/20 | 41/41 |
+| `deadline` | 0/10 | 0/36 | 0/3 | **0/20** | 0/41 |
+| `funding_type` | 0/10 | 0/36 | 3/3 | 0/20 | 0/41 |
+| `language` | 0/10 | 0/36 | 0/3 | 0/20 | 0/41 |
+| `eligibility` | 0/10 | 0/36 | 3/3 | 0/20 | 0/41 |
+
+La colonne NTNU a été mesurée le 29 septembre 2026 sur le HTML téléchargé, en
+faisant tourner `src/scraper.py` : 41 lignes, dont 3 lignes d'en-tête sans lien,
+donc 41 opportunités. Le titre est lu dans le lien et non dans la cellule, pour
+une raison mesurée : dans la cellule, 11 titres sur 41 se terminent par le
+marqueur d'une note de bas de page, `²` ou `¹`.
 
 Trois corrections que ces chiffres imposent :
 
 * **`language` n'est publié par aucune source active.** Le critère existe dans
   le code et fonctionne, mais il ne peut pas être validé sur une vraie page
   tant qu'une source ne le renseigne pas ;
-* **`deadline` n'est publié par aucune source active, et c'est définitif.**
-  Voir §6.2 ;
+* **`deadline` n'est exploitable sur aucune source active.** NTNU en publie
+  une, `1 March`, sans l'année. Une date sans année n'est pas une date, et
+  l'écrire dans une fiche ferait croire à une date. Voir §6.2 et §2.1 ;
 * le `degree` d'EACEA est vide, mais ses titres contiennent « Master ». Le
   critère `diplome` lit donc le titre quand le champ dédié est absent, en
   disant dans la raison lequel des deux il a lu. C'est une information
@@ -434,15 +488,19 @@ et `matches.py` les distingue.
 Ces colonnes viennent du validateur, qui compte les tableaux et les liens de
 fiche. Elles annoncent ce qu'il faut aller vérifier, pas ce qui est acquis.
 
-| Information | NTNU | UBC | MEXT |
-| ----------- | ---- | --- | ---- |
-| `title` | oui | oui | oui |
-| `degree` | oui | oui | non |
-| `field` | à déduire | à déduire | non |
-| `deadline` | **non** | **non** | **non** |
-| `funding` | à vérifier | non | oui |
-| `language` | oui | à vérifier | oui |
-| `eligibility` | oui | non | oui |
+NTNU en est sortie : elle est implémentée depuis la V0.11 et sa colonne est
+au §6.1. Le tableau ci-dessous annonçait `degree: oui` et `language: oui` pour
+elle ; la mesure donne 0/41 sur les deux.
+
+| Information | UBC | MEXT |
+| ----------- | --- | ---- |
+| `title` | oui | oui |
+| `degree` | oui | non |
+| `field` | à déduire | non |
+| `deadline` | **non** | **non** |
+| `funding` | à vérifier | non |
+| `language` | à vérifier | oui |
+| `eligibility` | non | oui |
 
 ## 6.3 La deadline : mesurée, pas supposée
 
@@ -620,20 +678,27 @@ C'est voulu, ce sont des sources décidées mais pas encore lues.
 
 ### 8.1.1 Ce que la veille lit aujourd'hui
 
-Mesuré le 28 septembre 2026 sur les deux fichiers de configuration :
+Mesuré le 29 septembre 2026 sur les deux fichiers de configuration, après
+l'activation de NTNU :
 
 | Ensemble | Nombre |
 | -------- | ------ |
 | sources inscrites au registre | 19 |
-| activées | 16 |
-| désactivées | 3 |
-| avec un bloc dans `config/selectors.json` | 4 |
+| activées | 17 |
+| désactivées | 2 |
+| avec un bloc dans `config/selectors.json` | 5 |
 | activées et sans bloc de sélecteurs | 12 |
-| sans bloc de sélecteurs, activées ou non | 15 |
+| sans bloc de sélecteurs, activées ou non | 14 |
 
-La veille lit donc 4 sources sur 19, et 4 sur 16 activées. Les 15 autres sont
+La veille lit donc 5 sources sur 19, et 5 sur 17 activées. Les 14 autres sont
 des sources dont l'URL a été vérifiée sans que leur structure HTML l'ait été,
 ce que §1.2 explique.
+
+Le compte des 12 activées sans bloc ne bouge pas, et c'est un détail qui
+mérite d'être dit : NTNU entre dans les deux ensembles au même moment, comme
+source activée et comme source lue. Une source qui n'aurait reçu qu'un bloc
+serait passée à 13. C'est aussi pourquoi la ligne de journal ci-dessous est
+inchangée alors que trois nombres du tableau viennent de changer.
 
 Depuis la V0.7, la veille écrit ce décompte dans son journal, sur une ligne :
 

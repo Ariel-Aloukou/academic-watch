@@ -3,11 +3,11 @@
 Veille académique : recherche de programmes de Master et de financements
 correspondant à un profil, sur des sources officielles.
 
-Le projet en est à la **V0.10** : quatre sources sont extraites, la correspondance
+Le projet en est à la **V0.11** : cinq sources sont extraites, la correspondance
 avec le profil classe les opportunités et explique pourquoi, le résultat est
 écrit sur disque, le programme **ne signale que ce qui n'a pas encore été
-montré**, et cette veille tourne seule chaque jour à 07:00 UTC. Sur les 69
-opportunités collectées, 9 correspondent au profil. Le bulletin part par email
+montré**, et cette veille tourne seule chaque jour à 07:00 UTC. Sur les 110
+opportunités collectées, 12 correspondent au profil. Le bulletin part par email
 et par un salon Discord, selon ce qui est configuré.
 Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 
@@ -22,14 +22,17 @@ Tout ce qui n'est pas fait est indiqué comme tel ci-dessous.
 | V0.5 | Détection des nouveautés | fait, 9 signalées puis 0 au run suivant |
 | V0.6 | Notification par email | fait, 6 secrets optionnels |
 | V0.7 | Plusieurs sources | fait, 4 sources sans toucher au programme |
-| V0.8 | GitHub Actions | fait, **jamais exécuté sur GitHub** |
+| V0.8 | GitHub Actions | fait, **exécuté sur GitHub le 29 septembre 2026** |
 | V0.9 | Veille automatique | fait, planification et plafond d'exécution |
-| V0.10 | Second canal de notification | fait, webhook Discord, **jamais exécuté sur GitHub** |
+| V0.10 | Second canal de notification | fait, webhook Discord, **message reçu dans le salon** |
+| V0.11 | Cinquième source | fait, NTNU, 5 sources, 110 opportunités, 12 retenues |
 
 Deux critères de la V0.3 ne sont pas implémentés, et ne le sont pas par oubli :
-aucune source ne renseigne de langue d'enseignement, et aucune ne publie de
-date limite. C'est vérifié page par page, pas supposé ; `docs/SOURCES.md` §6.3
-distingue ce qui a été mesuré négatif de ce qui n'a pas pu être lu.
+aucune source ne renseigne de langue d'enseignement, et aucune ne publie une
+date limite exploitable. NTNU en publie une, `1 March`, sans l'année : une date
+sans année n'est pas une date. C'est vérifié page par page, pas supposé ;
+`docs/SOURCES.md` §6.3 distingue ce qui a été mesuré négatif de ce qui n'a pas
+pu être lu.
 
 Le programme télécharge les pages au moment de l'exécution et **écrit deux
 fichiers** dans `data/` : l'historique complet et la mémoire de ce qui a déjà
@@ -49,9 +52,11 @@ Un commit n'est fait que si `data/` a réellement changé, donc une journée san
 nouveauté ne produit rien dans l'historique du dépôt. Le message dit ce qui a
 été trouvé, et le résultat est affiché en tête de run.
 
-Le workflow est écrit et testé, mais **il n'a pas encore été exécuté sur
-GitHub**. C'est le seul endroit du projet qui ne peut pas être validé en local.
-Il reste à l'activer, ou à attendre le prochain 07:00 UTC. Le détail des
+Le workflow **a été exécuté sur GitHub le 29 septembre 2026**, lancé à la main
+depuis l'onglet Actions : il est vert de bout en bout, le bulletin est arrivé
+dans le salon Discord, et `data/` n'a pas changé puisque rien n'était nouveau.
+C'était le seul endroit du projet que le local ne pouvait pas valider. Le
+premier run automatique de 07:00 UTC n'a pas encore eu lieu. Le détail des
 choix est dans `docs/VERSIONS.md` V0.8 pour l'exécution et V0.9 pour la
 planification.
 
@@ -224,9 +229,11 @@ bloquée. Elle n'écrit rien. Le détail des verdicts est dans `docs/SOURCES.md`
 19 sources sont déclarées, réparties en trois catégories : sites officiels
 d'universités, organismes officiels de bourses, portails spécialisés.
 
-Quatre sont aujourd'hui exploitées :
+Cinq sont aujourd'hui exploitées :
 
 * **TUM** (Allemagne), 10 programmes ;
+* **NTNU – Master's programmes in English** (Norvège), 41 lignes, dont 3
+  correspondent au profil ;
 * **KAIST – Explore Programs** (Corée du Sud), 36 programmes ;
 * **KAIST – Scholarship** (Corée du Sud), 3 bourses ;
 * **EACEA – catalogue Erasmus Mundus** (Union européenne), 20 programmes.
@@ -236,7 +243,7 @@ in Cybersecurity and Assurance », en correspondance directe. Ce catalogue est
 un annuaire large, pas une source de cybersécurité : le résultat est le bon
 résultat, pas une déception.
 
-Les 15 autres sont décidées et documentées, mais pas encore lues. La majorité
+Les 14 autres sont décidées et documentées, mais pas encore lues. La majorité
 sont des portails de recherche dont les résultats ne sont pas dans le HTML :
 elles ne peuvent pas être extraites avec une simple requête. `docs/SOURCES.md`
 dit lesquelles, et pourquoi.

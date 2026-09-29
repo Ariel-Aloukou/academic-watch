@@ -1077,10 +1077,16 @@ Le programme doit pouvoir fonctionner sans intervention humaine.
 
 ## État mesuré
 
-Le workflow est écrit et vérifié, mais **il n'a jamais été exécuté sur
-GitHub**. C'est la seule étape du projet qui ne peut pas être validée en local.
-Il sera connu pour vrai au premier run, et il faudra l'activer ou
-attendre 07:00 UTC.
+Le workflow est écrit et vérifié. Au moment où cette version a été écrite, il
+**n'avait jamais été exécuté sur GitHub**, et c'était la seule étape du projet
+que le local ne pouvait pas valider.
+
+> **Corrigé le 29 septembre 2026.** Le premier run a eu lieu, lancé à la main
+> depuis l'onglet Actions, et il est vert de bout en bout. Ce que la version ne
+> pouvait pas établir, il l'a établi : les sept étapes s'enchaînent, le bulletin
+> part, et `data/` ne change pas quand rien ne change — aucun commit du robot
+> n'a suivi ce run, ce qui est la preuve que le garde-fou
+> `git diff --cached --quiet` a fait son travail. Voir la V0.11.
 
 Les cinq points sont là. Le cinquième est celui qui manquait, et il n'était pas
 évident : **sans commit, `data/` se perd à chaque exécution.** Un runner GitHub
@@ -1239,6 +1245,10 @@ résolus.
   dans le YAML et éprouvée par mutations, mais le premier run automatique reste
   la seule validation qui manque. Comme en V0.8, il faudra lancer le workflow à
   la main.
+  > **Corrigé le 29 septembre 2026.** Le run a eu lieu, lancé à la main, et
+  > `origin/main` n'a reçu aucun commit du robot : `data/` est resté identique,
+  > ce qui est le comportement attendu d'une journée sans nouveauté. Voir la
+  > V0.11.
 
 ---
 
@@ -1402,6 +1412,14 @@ est complète » n'apparaît qu'après un échec.
   même règle qui interdit tout accès au réseau. Le programme a été exécuté en
   local, sa sortie est celle du cas A, et `data/` est resté identique à l'octet.
   Ce qui n'est pas vérifié, c'est la réponse du serveur.
+  > **Corrigé le 29 septembre 2026.** L'étudiant a créé le webhook, enregistré
+  > le secret `DISCORD_WEBHOOK`, lancé le workflow à la main, et **le message
+  > est arrivé dans son salon**, avec le bon contenu : 69 opportunités
+  > trouvées, 9 correspondent au profil, rien de nouveau. L'envoi fonctionne
+  > donc pour de vrai, et il est vérifié par la réception, pas par un test.
+  > Une limite reste : le journal du run n'a pas été relu, `gh` n'étant pas
+  > installé sur la machine de travail. La ligne de statut n'a donc pas été
+  > lue, sa forme having été déduite du cas C mesuré avant le run.
 * **Le secret est à créer par l'étudiant.** Rien dans le dépôt ne peut le créer :
   le webhook se fait dans les paramètres du salon, puis le secret dans les
   paramètres du dépôt. C'est la seule chose que cette version demande.
@@ -1411,6 +1429,9 @@ est complète » n'apparaît qu'après un échec.
   ni `discordapp.com/api/webhooks`, et qu'il lit `DISCORD_WEBHOOK` dans les
   secrets.
 * **Rien n'a été exécuté sur GitHub.** Comme en V0.8 et V0.9.
+  > **Corrigé le 29 septembre 2026.** Le run a eu lieu et il est vert. Le
+  > tableau ci-dessus reste valable : il décrit ce que le programme produit,
+  > et le run n'y a rien changé.
 
 ## Écarts
 
@@ -1430,6 +1451,244 @@ est complète » n'apparaît qu'après un échec.
   plafond n'est dans le résumé d'étape que le temps de ce run.
 * **Le salon est un mur de texte le jour d'une grosse journée.** C'est le choix
   explicite, pas un oubli.
+
+---
+
+# V0.11 - Une cinquième source, et quatre défauts corrigés
+
+## Objectif
+
+Ajouter une source sans toucher au programme, et mettre la documentation
+d'accord avec ce qui a été mesuré.
+
+NTNU était décidée depuis le 27 septembre 2026 : URL vérifiée, verdict
+`exploitable`, correspondance jugée excellente à l'œil. Elle n'était pas
+implémentée, faute de sélecteurs mesurés. Cette version les écrit.
+
+## La règle de §9, suivie dans l'ordre
+
+`docs/SOURCES.md` §9 impose neuf étapes, dans cet ordre, et la dernière dit
+qu'aucune source n'est scrapée avant d'être notée. Les neuf ont eu lieu.
+
+| Étape | Ce qu'elle a donné |
+| ----- | ------------------ |
+| 1. l'URL répond | 200, 94 713 caractères |
+| 2. des opportunités sont dans le HTML | 41 lignes de programme, 3 tableaux, pas un formulaire |
+| 3. les termes du profil sont dans la page | `cyber` 3 fois, `security` 3 fois, `infrastructure` 1 fois, `information` 1 fois |
+| 4. la page n'est pas un index | les 41 programmes sont sur la page elle-même, aucune sous-page à tester |
+| 5. la source est notée | `docs/SOURCES.md` §2.1 |
+| 6. inscrite avec `enabled: false` | elle l'était déjà depuis le registre d'origine |
+| 7. les sélecteurs sont écrits | `config/selectors.json` |
+| 8. le remplissage est mesuré | `docs/SOURCES.md` §6.1, colonne NTNU |
+| 9. `enabled` passe à `true` | après la mesure, jamais avant |
+
+La mesure a été faite avec `src/scraper.py` lui-même, pas avec une
+réécriture : une mesure faite avec une autre implementation peut réussir là où
+le programme échoue.
+
+## Trois sélecteurs, et pas un de plus
+
+| Clé | Sélecteur | Remplissage mesuré |
+| --- | --------- | ------------------ |
+| `item` | `table tr` | 44 lignes, dont 3 lignes d'en-tête |
+| `title` | `td:first-child a` | 41/41 |
+| `url` | `td:first-child a` | 41/41 |
+
+Le titre est lu **dans le lien** et non dans la cellule, pour une raison
+mesurée et non pour une intuition : dans la cellule, 11 titres sur 41 se
+terminent par le marqueur d'une note de bas de page, `²` ou `¹`. Le lien ne le
+porte pas. C'est le seul élément qui distingue les deux choix, et il ne se voit
+pas dans un compte.
+
+Les trois lignes d'en-tête sont écartées sans qu'aucune règle spéciale soit
+écrite : elles n'ont pas de lien, et une opportunité sans lien est écartée
+depuis la V0.2. `description`, `degree`, `field`, `language` et `deadline` n'ont
+pas de sélecteur, donc aucun de ces champs n'est rempli. C'est ce que la page
+publie.
+
+`description` mérite un mot. La deuxième colonne existe, et elle est
+utilisable : 29 fois `Trondheim`, 3 fois `Ålesund`, 1 fois `Gjøvik`, 1 fois
+`1 March`, 2 fois `No admissions for 2026 intake`, 5 fois vide. La mettre dans
+`description` ferait afficher `Trondheim` comme description de 33 programmes, et
+`No admissions for 2026 intake` sous le même nom qu'une ville. Le modèle n'a pas
+de champ pour une ville. La case a donc été laissée vide, sur décision
+explicite de l'étudiant, et non par oubli.
+
+## 41 opportunités, 3 retenues
+
+| Programme | Score | Lien |
+| --------- | ----- | ---- |
+| Information Security | 65/100 | `https://www.ntnu.edu/studies/mis` |
+| Cybersecurity and Assurance (CYBERSURE) | 65/100 | `https://www.ntnu.edu/studies/mscybsure` |
+| Digital Infrastructure and Cyber Security | 45/100 | `https://www.ntnu.edu/studies/mstcnns` |
+
+Les 38 autres sont lues, comprises et écartées : leurs titres ne contiennent
+aucun terme du profil. C'est un domaine qui n'est pas celui de l'étudiant, pas
+un défaut de lecture.
+
+## Le score plafonne à 65, et il n'est pas corrigé
+
+Aucun des trois programmes n'atteint 85. La raison est mesurée et affichée par
+le programme lui-même :
+
+```text
+titre Information Security, hors de la liste visée
+langue non publiée
+```
+
+La page s'appelle « Master's programmes in English » et sa section
+« International Master's programmes », mais **le diplôme n'est écrit ni dans la
+ligne ni dans le titre**. Le critère `diplome` retombe donc sur le titre, qui ne
+dit pas « Master », et perd 20 points. Les trois restent retenues, parce que
+seul `domaine` est bloquant : c'est une liste de critères, pas un seuil.
+
+Le programme ne peut pas y remédier. `degree` se lit dans la ligne du
+programme, jamais dans la source : rien ne permet d'écrire une constante. La
+corriger demanderait une clé de plus dans la configuration, donc du code, donc
+une décision qui n'appartient pas à cette version. Elle est notée, pas faite.
+
+## Une deadline sans année
+
+Le deuxième tableau s'intitule `Deadline`. Il ne contient qu'une ligne :
+
+```text
+Cold Climate Engineering — 1 March
+```
+
+Il n'y a pas d'année. Une date sans année n'est pas une date : l'écrire dans
+une fiche ferait croire à une date, et `matches.py` la comparerait à autre
+chose. Elle n'est donc pas extraite. C'est la même conclusion que celle de
+§6.3, et elle **confirme** ce que le validateur annonçait pour cette source,
+`deadline: non`, alors qu'il compte les liens et non les dates.
+
+## Quatre défauts trouvés dans la documentation
+
+Ils sont corrigés dans `docs/SOURCES.md`, et ils sont de trois ordres.
+
+* **Une phrase corrompue.** La section KAIST finissait sur « La
+  notificationyclique moins précisément ; ». Un mot s'était collé au début de
+  la ligne, et la phrase ne voulait rien dire. C'est le genre de faute qu'un
+  relecteur ne voit pas, parce que les mots restent lisibles ;
+* **Une mesure fausse.** Le tableau de la section NTNU annonçait « aucun
+  JavaScript ». La page porte **30 balises `<script>`** : le portail Liferay, la
+  mesure d'audience, un widget de discussion. Ce qui est vrai, et mesuré : les
+  41 programmes sont dans le HTML statique et ne dépendent d'aucun script, et
+  il n'y a ni `data-ajax` ni Angular ni `noscript`. L'affirmation a été
+  remplacée par la mesure ;
+* **Un programme qui n'existe pas.** La même section citait
+  `Engineering and ICT` parmi les programmes correspondants. Ce nom n'est dans
+  aucune des 41 lignes : c'est une faculté. Les quatre titres qui contiennent le
+  mot *Engineering* sont `Electric Power Engineering`, `Materials Science and
+  Chemical Engineering`, `Cold Climate Engineering` et `Coastal and Marine
+  Energy Engineering - CoMEM+`. Une correspondance affirmée à l'œil vaut moins
+  qu'un compte, et le compte est 3.
+
+Il y avait une quatrième affirmation du même type, dans la section KAIST : «
+sans aucun JavaScript » pour la page des programmes. Elle a été mesurée le 29
+septembre 2026, et elle est fausse elle aussi : la réponse contient 16 balises
+`<script>`, dont 13 chargent un fichier. Les 36 programmes sont bien dans le
+HTML statique, donc la veille n'exécute rien pour les lire, et la section KAIST
+est corrigée sur le même modèle que NTNU.
+
+Un détail de cette mesure mérite d'être noté, parce qu'il change la lecture du
+validateur. Il ne cherche pas les balises `script` : il cherche quatre
+marqueurs d'hydratation de framework, `__NUXT__`, `__NEXT_DATA__`,
+`data-reactroot` et `ng-version`. Une page peut donc porter vingt scripts sans
+être signalée, et c'est exactement ce qui arrive à KAIST. Le verdict
+`a_tester` qu'il lui donne ne vient pas de JavaScript, mais de l'absence de
+tableau et de lien de fiche.
+
+## Un défaut trouvé dans un outil de mesure
+
+La page téléchargée fait 94 713 caractères. La copie relue depuis le disque en
+faisait 94 702, et l'écart avait une cause : le fichier avait été écrit sans
+traduction de fin de ligne, puis relu avec `read_text`, qui applique la
+traduction universelle et transforme chaque CRLF en LF. Onze fins de ligne
+CRLF, onze caractères perdus.
+
+Vérifié par un compte : l'écart vaut exactement le nombre de CRLF, et la
+longueur relue vaut la longueur brute moins ce nombre. Aucun sélecteur n'est
+affecté — 41 programmes sont lus dans les deux cas — mais le chiffre 94 702
+n'aurait pas dû être écrit dans le document, et il ne l'a pas été.
+
+C'est le même piège que celui du `>` de PowerShell, qui écrit en UTF-16, et
+celui du pipeline PowerShell, qui reconvertit les LF en CRLF et donne une
+mesure fausse. La règle qui en sort : **un chiffre écrit dans la documentation
+doit venir d'une lecture en octets, pas d'une relecture de texte.**
+
+## État mesuré
+
+Mesuré le 29 septembre 2026, avec la suite complète et une exécution réelle du
+programme.
+
+| Mesure | Avant | Après |
+| ------ | ----- | ----- |
+| sources lues par la veille | 4 | 5 |
+| opportunités enregistrées | 69 | 110 |
+| correspondant au profil | 9 | 12 |
+| nouvelles au premier run | 0 | 3 |
+| tests | 390 | 390 |
+| lignes ajoutées ou modifiées dans `src/` | — | 0 |
+
+Le registre, recompté après l'écriture :
+
+| Ensemble | Avant | Après |
+| -------- | ----- | ----- |
+| sources inscrites | 19 | 19 |
+| activées | 16 | 17 |
+| désactivées | 3 | 2 |
+| avec un bloc de sélecteurs | 4 | 5 |
+| activées et sans bloc | 12 | **12** |
+| sans bloc, activées ou non | 15 | 14 |
+
+Le compte des activées sans bloc ne bouge pas, et c'est un détail qui mérite
+d'être dit : NTNU entre dans les deux ensembles au même moment, comme source
+activée et comme source lue. Une source qui n'avait reçu qu'un bloc serait
+passée à 13. C'est aussi pour cela que la ligne de journal
+
+```text
+Sources sans sélecteurs : 12 activées et non lues, voir docs/SOURCES.md §8.
+```
+
+est inchangée, et qu'aucun test n'a eu besoin d'être corrigé.
+
+**`data/` a été restauré à l'octet.** La veille locale avait marqué les trois
+programmes comme vus, ce qui aurait supprimé leur annonce. Les deux fichiers
+ont été remis à leur état d'avant, `opportunities.json` et `seen.json`, et
+l'identité a été vérifiée par empreinte, pas à l'œil. Les trois opportunités
+seront donc annoncées au premier run sur GitHub.
+
+## Ce que cette version ne change pas
+
+* **Aucun code.** Trois lignes dans `config/selectors.json`, un `true` dans
+  `config/sources.json`. C'est la promesse de la V0.7, tenue sur une source de
+  plus ;
+* **Aucun test.** Les 390 tests passent avant et après. Un test qui aurait dû
+  changer aurait signifié qu'un test comptait un nombre au lieu d'une
+  propriété ;
+* **Aucun des deux canaux de notification.** Le bulletin gagne trois lignes, la
+  ligne de statut garde ses cinq formes.
+
+## Écarts
+
+* La règle de §9 demande d'inscrire la source avec `enabled: false` avant d'écrire
+  les sélecteurs. NTNU était déjà dans le registre avec `enabled: false`, donc
+  l'étape 6 n'a rien demandé. Elle a été respectée quand même, en activant
+  après la mesure et jamais avant.
+
+## Limites assumées
+
+* **Trois opportunités sur 41.** C'est le prix d'un profil étroit. Une source
+  plus large apporterait plus de lignes et moins de correspondances ;
+* **Le score plafonne à 65 sur 100.** Noté plus haut, il serait possible de le
+  corriger, mais pas dans cette version ;
+* **La deadline n'est pas extraite.** Une ligne sur 41, sans année. Elle le
+  serait le jour où la page publiera une année ;
+* **La page peut changer.** 41 programmes le 29 septembre 2026, c'est une
+  mesure du jour, pas une propriété du site. La nuit où NTNU réorganise ses
+  tableaux, `item: table tr` continuera de trouver des lignes, mais `title` et
+  `url` pourront ne plus correspondre. Une source qui se vide sans erreur est le
+  défaut de surveillance connu du projet, et il n'est pas traité ici.
 
 ---
 
