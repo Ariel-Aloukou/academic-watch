@@ -77,14 +77,20 @@ jobs:
       # une veille en échec passerait pour une veille réussie, et l'étape
       # suivante committerait le fichier tel quel.
       # Les six secrets de la V0.6, lus par `notifier.py` dans
-      # l'environnement. Ils sont passés par `env` et jamais écrits dans la
-      # commande : le masquage de GitHub remplace la valeur quand elle
-      # apparaît telle quelle dans le journal, mais pas une valeur que le shell
-      # reconstitue. Dans `env`, la valeur n'est jamais affichée.
+      # l'environnement, et le septième, l'URL du webhook Discord. Ils sont
+      # passés par `env` et jamais écrits dans la commande : le masquage de
+      # GitHub remplace la valeur quand elle apparaît telle quelle dans le
+      # journal, mais pas une valeur que le shell reconstitue. Dans `env`, la
+      # valeur n'est jamais affichée.
       #
       # Un secret absent ou vide donne une chaîne vide, donc le programme reste
       # en console et le dit. C'est le mode par défaut : le workflow fonctionne
       # sans qu'aucun secret ne soit créé.
+      #
+      # Les deux canaux sont indépendants. L'URL Discord seule fait poster le
+      # bulletin, et les six variables SMTP seules font partir l'email : les
+      # deux canaux marchent avec le même `python src/main.py | tee journal.txt`,
+      # et un test compare les sept noms d'ici à ceux que `notifier.py` lit.
       - name: Lancer la veille
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -93,6 +99,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           set -o pipefail
           python src/main.py | tee journal.txt

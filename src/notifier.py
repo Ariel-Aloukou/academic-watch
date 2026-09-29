@@ -5,7 +5,7 @@ déjà choisi parmi les 69 fiches. Ici il n'y a qu'une décision à prendre, et
 elle est la seule : ne pas rendre la même information deux fois.
 
     rendre()     le texte du bulletin, une seule fois
-    publier()    la console toujours, l'email si les secrets sont là
+    publier()    la console toujours, l'email et Discord s'ils sont configurés
 
 Le même texte part dans les deux. Deux rendus de la même liste divergeraient au
 premier champ ajouté, et la divergence se verrait dans la boîte de réception
@@ -50,12 +50,22 @@ permet d'essayer le code sans avoir de boîte aux lettres.
 Le mot de passe se met dans les secrets du dépôt GitHub, jamais dans `config/` et
 jamais dans un commit. Il n'est écrit nulle part dans ce dépôt.
 
+Discord est le second canal, et il n'a pas la même forme : une seule variable,
+lue ou pas lue, jamais à moitié. Elle est venue après l'email parce que le mot de
+passe d'application d'Outlook exige une double authentification, et qu'un secret
+que l'étudiant ne peut pas créer seul est un canal qui n'existe pas. Les six
+variables SMTP restent en place : les deux canaux sont indépendants, et le
+programme utilise celui qui est là.
+
 ## L'échec d'envoi n'arrête pas la veille
 
 Si l'envoi échoue, `publier` le dit et rend la main. Il ne lève pas d'exception,
 pour une raison concrète : dans le workflow, une veille en échec fait sauter
 l'étape qui commite `data/`. Une veille qui a réussi et un email qui n'est pas
-parti ne doivent pas coûter la journée de données.
+parti ne doivent pas coûter la journée de données. La règle est la même pour
+Discord : les deux canaux sont tentés l'un après l'autre, et l'échec de l'un
+n'empêche pas l'autre d'essayer. `publier` renvoie une seule ligne qui nomme les
+deux, parce que c'est elle que le workflow recopie dans le résumé d'étape.
 
 Le prix de ce choix est qu'un échec pourrait se perdre dans le journal. Il est
 visible deux fois : la ligne de statut nomme l'erreur, et le workflow recopie
@@ -65,9 +75,12 @@ cette ligne dans le résumé d'étape.
 import os
 import smtplib
 import ssl
+import time
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import NamedTuple
+
+import requests
 
 # Les deux étiquettes de la V0.5. Ce sont des constantes parce que `main.py` les
 # attribue et que le rendu les compte : une faute de frappe dans l'une des deux
@@ -80,8 +93,35 @@ MISE_A_JOUR = "mise à jour"
 VARIABLES = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "EMAIL_FROM", "EMAIL_TO")
 
 # Le même délai que le scraper. Un serveur SMTP qui ne répond pas doit bloquer la
-# veille le temps d'une collecte, pas plus.
+# veille le temps d'une collecte, pas plus. Il sert aussi à la connexion au
+# webhook : la même réponse « attendez » pour deux canaux.
 DELAI_SECONDES = 30
+
+# Le canal Discord, et sa seule variable. Elle est lue ou absente, jamais à
+# moitié : une URL de webhook tronquée échouerait en 404 à chaque exécution, donc
+# mieux vaut qu'elle soit absente, et que le programme dise qu'elle ne l'est pas.
+VARIABLE_DISCORD = "DISCORD_WEBHOOK"
+
+# Discord refuse un `content` de plus de 2000 caractères, et c'est une limite de
+# l'API, pas un choix : sa page « Execute Webhook » annonce « the message
+# contents (up to 2000 characters) », et elle ne se négocie pas. Mesuré sur le
+# bulletin du 28 septembre 2026, le texte fait 3493 caractères, donc deux
+# messages. Le pire cas du registre entier, les 69 fiches toutes retenues, en
+# fait 25317 caractères, donc treize.
+LIMITE_MESSAGE = 2000
+
+# Un choix de lisibilité, pas une limite de Discord. Le pire cas du registre
+# donnerait treize messages, et treize messages à 7 h du matin transformeraient le
+# salon en mur de texte dont l'étudiant n'en lirait aucun.
+# Ce qui ne rentre pas n'est pas perdu : le résumé d'étape recopie la section
+# « à signaler » entière, et l'email n'a pas de limite.
+MESSAGES_MAX = 5
+
+# Le plafond d'attente entre deux messages. La documentation de Discord dit de ne
+# pas écrire la limite de débit en dur, mais de lire les en-têtes de réponse ; ce
+# que fait `_attendre_avant_le_suivant`. Ce plafond n'existe que pour qu'un
+# `X-RateLimit-Reset-After` absent ou aberrant ne fasse pas dormir le run.
+ATTENTE_MAX = 5.0
 
 
 class Bulletin(NamedTuple):
@@ -315,39 +355,220 @@ def envoyer(msg, valeurs, transport=smtplib.SMTP):
         serveur.send_message(msg)
 
 
-def publier(bulletin, transport=smtplib.SMTP) -> str:
-    """Affiche le bulletin, et l'envoie par email s'il est configuré.
+def _taille(lignes):
+    """La longueur du texte que le collage produirait, sans le construire.
+
+    Mesurer avant de construire évite d'assembler un message pour le jeter
+    ensuite parce qu'il est trop long, et évite l'erreur d'un caractère : compter
+    la ligne et son retour à la ligne ferait déborder un message d'exactement un
+    caractère, tous les jours, sans qu'aucune erreur ne le dise.
+    """
+    if not lignes:
+        return 0
+    return sum(len(ligne) for ligne in lignes) + len(lignes) - 1
+
+
+def decouper(texte, limite=LIMITE_MESSAGE):
+    """Le bulletin en messages de `limite` caractères au plus, coupés aux fins
+    de ligne.
+
+    Couper entre deux lignes et non au milieu d'une ligne est ce qui rend le
+    message lisible : une coupure au milieu d'un champ « Domaines » laisserait le
+    champ sans sa valeur, et rien ne dirait que le texte est incomplet. Mesuré
+    sur le registre du 28 septembre 2026, la ligne la plus longue fait 375
+    caractères, donc ce chemin suffit aujourd'hui.
+
+    Il ne suffirait pas toujours. Une source qui publierait un titre de trois
+    mille caractères produirait une ligne plus longue que la limite, et il n'y a
+    alors plus de frontière à couper. Cette ligne est donc débitée au caractère,
+    ce qui est la seule découpe qui reste : elle abîme la mise en forme, mais
+    elle envoie tout, alors qu'une ligne refusée ferait perdre tout le message.
+    """
+    messages = []
+    courant = []
+    for ligne in texte.split("\n"):
+        morceaux = [ligne[i:i + limite] for i in range(0, len(ligne), limite)] or [""]
+        for morceau in morceaux:
+            if courant and _taille(courant) + 1 + len(morceau) > limite:
+                messages.append("\n".join(courant))
+                courant = []
+            courant.append(morceau)
+    if courant:
+        messages.append("\n".join(courant))
+    return messages
+
+
+def messages_discord(texte, maximum=MESSAGES_MAX):
+    """Les messages à poster, et le nombre de ceux qui n'y entrent pas.
+
+    Le second nombre est rendu pour qu'il soit dit, pas pour être comparé : un
+    message non envoyé sans qu'on le dise se lit comme un message envoyé.
+    """
+    tous = decouper(texte)
+    retenus = tous[:maximum]
+    # Le nombre de ceux qui n'entrent pas est la différence avec ce qui a été
+    # retenu, et non avec le plafond. Il serait négatif pour un bulletin court,
+    # et un nombre négatif est vrai : la ligne de statut dirait qu'il manque
+    # moins de zéro messages.
+    return retenus, len(tous) - len(retenus)
+
+
+def _attendre_avant_le_suivant(reponse, dormeur):
+    """Une pause, et seulement si Discord dit qu'il en faut une.
+
+    La documentation de Discord est explicite : écrire la limite de débit en dur
+    est une faute, parce qu'elle change sans prévenir. Elle demande de lire
+    `X-RateLimit-Remaining` et, quand il vaut zéro, `X-RateLimit-Reset-After`.
+    C'est tout ce que fait cette fonction, et rien d'autre.
+
+    Un en-tête absent ne fait pas attendre : la réponse est alors peut-être venue
+    d'un serveur intermédiaire, et dormir au hasard coûterait plus de temps
+    qu'il n'en évite. Une valeur illisible non plus : elle vaut une seconde, ce
+    qui est l'ordre de grandeur utile, et `publier` reste le filet au cas où
+    l'envoi échouerait quand même.
+    """
+    if reponse.headers.get("X-RateLimit-Remaining", "1") != "0":
+        return
+    try:
+        secondes = float(reponse.headers.get("X-RateLimit-Reset-After", "1"))
+    except ValueError:
+        secondes = 1.0
+    dormeur(min(max(secondes, 0.0), ATTENTE_MAX))
+
+
+def envoyer_discord(messages, webhook, transport=requests.post, dormeur=time.sleep):
+    """L'envoi à Discord : une requête par message, sur l'URL du webhook.
+
+    L'URL porte le secret. Elle n'est donc jamais journalisée, jamais mise dans
+    `config/`, et l'erreur que `publier` nomme est le type d'exception, pas son
+    message, qui contient l'URL.
+
+    `raise_for_status` est appelé parce que la bibliothèque HTTP ne lève pas sur
+    un 404 : sans lui, un webhook supprimé depuis les paramètres du salon se
+    lirait comme un envoi réussi, tous les jours, en silence.
+
+    `wait` est demandé pour la même raison, par un chemin différent. Sa valeur par
+    défaut est `false`, et la documentation est explicite sur ce que cela
+    autorise : « when `false` a message that is not saved does not return an
+    error ». La réponse est alors un 204 que la vérification d'erreur laisse
+    passer. Sans `wait`, un message que Discord refuse d'enregistrer se lirait
+    « 1 message envoyé » alors que le salon est vide. Avec `wait`, la réponse
+    n'est un succès qu'une fois le message enregistré, et un refus est un 4xx.
+    C'est un paramètre de requête et non un morceau collé à l'URL, parce que
+    l'URL porte le secret et doit arriver telle quelle.
+
+    `transport` et `dormeur` sont des coutures, comme `transport` dans
+    `envoyer` : le programme se comporte normalement sans qu'on en parle, et les
+    tests passent un faux, donc aucun n'attend et aucun n'ouvre de connexion.
+    """
+    for position, message in enumerate(messages):
+        reponse = transport(
+            webhook,
+            params={"wait": "true"},
+            json={"content": message},
+            timeout=DELAI_SECONDES,
+        )
+        reponse.raise_for_status()
+        if position + 1 < len(messages):
+            _attendre_avant_le_suivant(reponse, dormeur)
+    return len(messages)
+
+
+def _par_email(bulletin, transport, manquantes) -> str:
+    """Ce que l'email a fait, en une phrase, sans jamais lever.
+
+    La phrase est celle du canal, pas celle de la console. « console seule »
+    serait faux ici dès que Discord a envoyé quelque chose, et `publier` ne la
+    garde que pour le cas où aucun des deux canaux n'a rien fait.
+    """
+    valeurs = {nom: os.environ.get(nom, "").strip() for nom in VARIABLES}
+    if manquantes:
+        return f"email non configuré (il manque {', '.join(manquantes)})"
+    try:
+        envoyer(message(bulletin, valeurs), valeurs, transport=transport)
+    except Exception as erreur:
+        # Tout est rattrapé, y compris une faute de code. Le type de
+        # l'exception est nommé, donc une NameError se lirait au lieu de se
+        # déguiser en problème de réseau.
+        return f"email non envoyé ({type(erreur).__name__})"
+    return f"email envoyé à {valeurs['EMAIL_TO']}"
+
+
+def _par_discord(bulletin, transport, dormeur) -> str:
+    """Ce que Discord a fait, en une phrase, sans jamais lever.
+
+    Absente, la variable n'est pas une erreur : c'est le mode par défaut. Elle est
+    nommée quand même, pour qu'un jour où l'on croyait Discord configuré se voie.
+    """
+    webhook = os.environ.get(VARIABLE_DISCORD, "").strip()
+    if not webhook:
+        return "Discord non configuré"
+    try:
+        messages, manques = messages_discord(bulletin.texte)
+        envoyes = envoyer_discord(
+            messages, webhook, transport=transport, dormeur=dormeur
+        )
+    except Exception as erreur:
+        return f"Discord non envoyé ({type(erreur).__name__})"
+    etat = f"Discord, {compte(envoyes, 'message envoyé', 'messages envoyés')}"
+    if manques:
+        etat += (
+            f", {compte(manques, 'message de plus', 'messages de plus')}"
+            " dans le résumé du run"
+        )
+    return etat
+
+
+def publier(
+    bulletin, transport=smtplib.SMTP, transport_http=requests.post, dormeur=time.sleep
+) -> str:
+    """Affiche le bulletin, et l'envoie par email et Discord s'ils sont configurés.
 
     Renvoie la ligne qui dit ce qui a été fait, et elle est affichée : c'est elle
     que le workflow recopie dans le résumé d'étape, et c'est la seule trace
     qu'un run automatique a réussi à notifier.
 
-    Ne lève jamais. Voir le docstring du module : une exception ici ferait
+    Ne lève jamais, et n'interrompt pas le canal suivant non plus : les deux sont
+    tentés l'un après l'autre, donc un serveur de messagerie cassé n'empêche pas
+    le webhook de partir. Voir le docstring du module : une exception ici ferait
     sauter le commit de `data/`, donc perdrait une journée de veille qui, elle,
     a réussi.
 
-    `transport` est injecté : les tests le remplacent par un faux, et aucun n'est
-    obligé de recourir à `monkeypatch.setattr` sur un module de la bibliothèque
-    standard. Le fonctionnement réel garde la valeur par défaut.
+    Les trois paramètres sont des coutures, injectées pour qu'aucun test n'ait
+    ni à joindre un serveur ni à attendre : `transport` pour le SMTP,
+    `transport_http` pour le webhook, `dormeur` pour la pause entre deux
+    messages. Aucun test n'est obligé de recourir à `monkeypatch.setattr` sur un
+    module de la bibliothèque standard. Le fonctionnement réel garde les valeurs
+    par défaut.
     """
     print(bulletin.texte)
 
-    valeurs, manquantes = configuration()
-    if manquantes:
-        ligne = f"Notification : console seule, il manque {', '.join(manquantes)}"
+    _, manquantes = configuration()
+    email_part = _par_email(bulletin, transport, manquantes)
+    discord_part = _par_discord(bulletin, transport_http, dormeur)
+
+    if manquantes and discord_part == "Discord non configuré":
+        # Le mode par défaut : rien n'est sorti, et la console a tout affiché.
+        # La phrase est celle que la documentation annonce, et elle nomme les six
+        # variables parce qu'un « console seule » sans dire lesquelles ne sert
+        # à rien. Elle ne vaut que si le second canal n'a rien fait non plus,
+        # sinon la ligne affirmerait « console seule » et « 1 message envoyé »
+        # dans la même phrase.
+        # Le second canal est nommé lui aussi. Il n'a rien fait, donc son absence
+        # ne contredit pas la phrase ; c'est au contraire la moitié de ce que
+        # l'étudiant doit savoir pour configure la veille.
+        ligne = (
+            f"Notification : console seule, il manque {', '.join(manquantes)}"
+            f", {discord_part}"
+        )
     else:
-        try:
-            envoyer(message(bulletin, valeurs), valeurs, transport=transport)
-        except Exception as erreur:
-            # Tout est rattrapé, y compris une faute de code. Le type de
-            # l'exception est nommé, donc une NameError se lirait au lieu de se
-            # déguiser en problème de réseau.
-            ligne = (
-                f"Notification : email non envoyé ({type(erreur).__name__}), "
-                "la veille est complète"
-            )
-        else:
-            ligne = f"Notification : email envoyé à {valeurs['EMAIL_TO']}"
+        ligne = f"Notification : {email_part}, {discord_part}"
+    # « la veille est complète » n'est ajouté que si un envoi a échoué. Mis
+    # toujours, il allongerait chaque ligne d'un run sans incident, et surtout il
+    # ne voudrait rien dire : on ne prouve pas qu'une veille est complète parce
+    # qu'elle a été notifiée.
+    if "non envoyé" in ligne:
+        ligne += ", la veille est complète"
 
     print()
     print(ligne)

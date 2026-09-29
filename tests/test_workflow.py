@@ -215,24 +215,29 @@ def test_le_plaford_ne_tombe_pas_pendant_une_collecte_normale(job):
 
 # 4. La notification, qui ne se voit pas sans le navigateur
 
-# Ces tests lisent `notifier.VARIABLES` au lieu de recopier la liste. C'est le
+# Ces tests lisent les noms dans `notifier.py` au lieu de les recopier. C'est le
 # seul moyen d'attraper le cas qui fait le dégât : renommer une variable dans
 # `notifier.py` sans toucher au workflow. Aucun test ne le verrait, parce que les
-# deux fichiers resteraient valides, et le résultat serait un email qui ne part
-# jamais, en silence, tous les jours.
+# deux fichiers resteraient valides, et le résultat serait une notification qui ne
+# part jamais, en silence, tous les jours.
+
+# Les sept noms, lus et non recopiés. Les six de l'email se lisent ensemble ou pas
+# du tout ; l'URL du webhook se lit seule, donc l'ensemble des sept est une simple
+# réunion, pas une nouvelle règle.
+SECRETS = set(notifier.VARIABLES) | {notifier.VARIABLE_DISCORD}
 
 
 def test_les_variables_du_code_sont_toutes_dans_le_workflow(etapes):
     # Un secret en plus dans le workflow ne sert à rien, un secret en moins fait
     # que l'envoi n'est jamais tenté, et le programme ne dit que la console.
-    assert set(etapes["Lancer la veille"]["env"]) == set(notifier.VARIABLES)
+    assert set(etapes["Lancer la veille"]["env"]) == SECRETS
 
 
 def test_chaque_secret_est_lue_dans_les_secrets_du_depot(etapes):
     # `${{ secrets.X }}` et non la valeur : une valeur écrite dans le YAML serait
     # dans le dépôt, donc publique, et versionnée.
     env = etapes["Lancer la veille"]["env"]
-    for nom in notifier.VARIABLES:
+    for nom in SECRETS:
         assert env[nom] == "${{ secrets." + nom + " }}"
 
 
@@ -242,14 +247,25 @@ def test_le_mot_de_passe_n_est_jamais_dans_la_commande(etapes):
     # pas une valeur que le shell reconstitue, ni un caractère interprété. Dans
     # `env`, la valeur n'est jamais écrite dans le run.
     commande = etapes["Lancer la veille"]["run"]
-    for nom in notifier.VARIABLES:
+    for nom in SECRETS:
         assert nom not in commande
 
 
-def test_le_resume_dit_si_l_email_est_parti(etapes):
+def test_aucune_url_de_webhook_n_est_ecrite_dans_le_workflow():
+    # Le risque propre à ce canal : l'URL du webhook est un mot de passe, et
+    # coller la vraie dans le YAML la publierait dans l'historique du dépôt, où
+    # elle resterait même après l'avoir retirée. Le dépôt est privé aujourd'hui,
+    # donc rien ne se verrait tout de suite.
+    contenu = CHEMIN.read_text(encoding="utf-8")
+    assert "discord.com/api/webhooks" not in contenu
+    assert "discordapp.com/api/webhooks" not in contenu
+
+
+def test_le_resume_dit_si_la_notification_est_partie(etapes):
     # C'est la seule trace qu'un run automatique a notifié, ou qu'il a tenté et
     # échoué. Sans elle, un mot de passe expiré se voit exactement comme un jour
-    # sans nouveau.
+    # sans nouveau. Le motif ne distingue pas les deux canaux : la ligne rendue
+    # par `publier` les nomme tous les deux, donc un seul motif suffit.
     assert "Notification" in etapes["Résumé de la veille"]["run"]
 
 
