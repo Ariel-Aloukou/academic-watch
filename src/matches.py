@@ -96,7 +96,78 @@ DIPLOMES_COMPOSES = re.compile(r"master'?s?\s*-\s*ph\.?\s*d\.?", re.IGNORECASE)
 
 # Un niveau plus large que le diplôme visé ouvre la porte à ce diplôme. Au
 # Royaume-Uni, « graduate programs » commence au Master.
-NIVEAUX_LARGES = ("graduate",)
+#
+# Ces deux mots ne suffisent pas : « graduate » nomme aussi des personnes, et la
+# page de MEXT le fait cinq fois sur sept. Voir `MOTS_DE_NIVEAU` et
+# `niveau_large_mentionne`, qui expliquent pourquoi la règle regarde ce qui suit
+# le mot et non le mot lui-même.
+NIVEAUX_LARGES = ("graduate", "postgraduate")
+
+# Ce qu'on peut suivre, énuméré : les mots par lesquels une page dit *quel* niveau
+# elle offre. C'est la seule liste ajoutée par la V0.13, et c'est une liste de
+# noms de diplôme, pas de vocabulaire du domaine des bourses.
+#
+# ## Pourquoi une liste, et pas son contraire
+#
+# La règle pouvait se poser en « graduate suivi d'un mot qui n'est pas une
+# fonction », ou l'inverse : « graduate suivi d'un mot de cette liste ». Les
+# deux formes ont été essayées sur les phrases réelles. La seconde est retenue
+# pour une raison qui n'est pas la commodité : **son erreur est dans le bon
+# sens**.
+#
+# Une liste d'exclusion se trompe sur un mot qu'elle ne connaissait pas — un
+# adverbe, une préposition rare — et compte alors comme niveau une bourse de
+# sortants de lycée. C'est exactement le défaut qu'elle est censée supprimer, et
+# il reviendrait par la porte du vocabulaire.
+#
+# Une liste d'inclusion se trompe sur un nom de niveau qu'elle ne connaissait
+# pas, et perd une vraie bourse. Elle passera inaperçue, ce qui est le moindre
+# des deux : une veille perd une ligne, ou bien elle annonce en tête de bulletin
+# une bourse à laquelle l'étudiant n'a pas droit.
+#
+# ## D'où viennent ces mots
+#
+# Mesurés le 29 septembre 2026, sur la collecte du jour (110 opportunités, 192
+# textes, 5 sources) et sur les sept lignes d'éligibilité de MEXT :
+#
+# * « school » et « programs » — les 9 occurrences réelles du corpus, toutes de
+#   vraies bourses de Master : « The Kim Jaechul Graduate School of AI »,
+#   « KAIST graduate programs » ;
+# * « of », « with », « who » — les 5 occurrences de MEXT, toutes fausse
+#   positif : « a graduate **of** a college », « university or college
+#   graduates **who** have practical work experience », « includes prospective
+#   graduates » ;
+# * « level », « degree », « studies », « course », « student », « training »,
+#   « year », « semester », « education » — le tableau des montants de MEXT, qui
+#   écrit « Graduate school **level** », et les formulations de niveau des autres
+#   pages consultées.
+#
+# Limite assumée : une page qui écrirait « graduate certificate » ou « graduate
+# pathway » ne serait pas vue comme un niveau. Le code ne comprend pas
+# l'anglais ; il retient ce que les pages réellement lues écrivent, et il
+# préfère manquer une ligne à en inventer une.
+MOTS_DE_NIVEAU = (
+    "school",
+    "schools",
+    "program",
+    "programs",
+    "programme",
+    "programmes",
+    "degree",
+    "degrees",
+    "studies",
+    "study",
+    "level",
+    "course",
+    "courses",
+    "student",
+    "students",
+    "education",
+    "training",
+    "year",
+    "years",
+    "semester",
+)
 
 # Une offre de niveau doctoral. Attention : les formes composées ont déjà été
 # retirées avant cette recherche, sinon « Master's-Ph.D. Integrated » ferait
@@ -289,6 +360,36 @@ def sans_diplomes_composes(texte):
     return DIPLOMES_COMPOSES.sub(" ", normaliser(texte or ""))
 
 
+def niveau_large_mentionne(texte):
+    """Vrai si un niveau plus large que le diplôme visé est proposé.
+
+    « graduate » ne suffit pas, et c'est mesuré : sur les sept lignes
+    d'éligibilité de MEXT, cinq contiennent le mot et les cinq désignent le
+    diplôme **déjà obtenu** par le candidat — « a graduate of a college »,
+    « university or college graduates who have practical work experience »,
+    « includes prospective graduates ». Chacune valait 40 points, donc une
+    bourse de sortants de lycée passait pour une bourse de Master.
+
+    Ce qui distingue les deux sens n'est pas le mot, ni son nombre : c'est **ce
+    qui le suit**. « a Japanese graduate school » offre un niveau ; « a
+    graduate of a college » décrit une personne. La règle exige donc que le mot
+    soit suivi d'un mot de `MOTS_DE_NIVEAU`, sans quoi il n'ouvre rien.
+
+    Une occurrence sans mot suivant est écartée également : « high school
+    graduates » et « includes prospective graduates » se terminent là, et
+    leur sens est sans ambiguïté — des personnes.
+
+    `contient_mot` n'est pas appelé, et `variantes` non plus. Ils servent à
+    accepter le pluriel, qui est ici précisément la forme à écarter.
+    """
+    reste = (texte or "").lower()
+    for niveau in NIVEAUX_LARGES:
+        for trouve in re.finditer(rf"\b{re.escape(niveau)}\b\s+([a-z]+)", reste):
+            if trouve.group(1) in MOTS_DE_NIVEAU:
+                return True
+    return False
+
+
 def niveau_atteignable(texte, cibles):
     """Vrai si le texte propose l'un des diplômes visés, ou un niveau plus large.
 
@@ -298,7 +399,7 @@ def niveau_atteignable(texte, cibles):
     reste = sans_diplomes_composes(texte).lower()
     if any(cible.lower() in reste for cible in cibles):
         return True
-    return any(contient_mot(reste, niveau) for niveau in NIVEAUX_LARGES)
+    return niveau_large_mentionne(reste)
 
 
 def mesure_domaine(opportunity, profil, points):

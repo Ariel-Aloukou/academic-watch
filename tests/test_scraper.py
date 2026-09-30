@@ -12,13 +12,18 @@ la fonction, pas après.
 Couvert ici : le contrat de `collect_opportunities`, c'est-à-dire ce qu'elle
 rend et ce qu'elle fait quand une source échoue. C'est ce que la V0.7 a changé.
 
-Non couvert : `test_source`, `classify` et `fetch_page`, qui n'ont rien à voir
-avec la V0.7 et appartiennent à un autre travail. `test_source` et `fetch_page`
-touchent le réseau, donc les tester demanderait une seconde couture
-d'injection pour un module dont le reste fonctionne, et dont les fonctions de
-mesure sont déjà vérifiées à la main et écrites dans `docs/SOURCES.md` §5. Ne
-pas les couvrir ici est un reste à faire assumé, pas un oubli : les écrire dans
-ce fichier ferait croire que le module entier est testé, et il ne l'est pas.
+Non couvert : `test_source` et `classify`, qui n'ont rien à voir avec la V0.7 et
+appartiennent à un autre travail. Ils touchent le réseau, donc les tester
+demanderait une seconde couture d'injection pour un module dont le reste
+fonctionne, et dont les fonctions de mesure sont déjà vérifiées à la main et
+écrites dans `docs/SOURCES.md` §5. Ne pas les couvrir ici est un reste à faire
+assumé, pas un oubli : les écrire dans ce fichier ferait croire que le module
+entier est testé, et il ne l'est pas.
+
+`fetch_page` était dans cette liste jusqu'à la V0.13, qui l'a corrigé : il rendait
+`response.text`, qui suit l'en-tête `Content-Type` et non la page. Un défaut qui
+se voyait à l'œil sur une page réelle et qui n'était pas testé, alors même que
+la couture existait déjà — voir la section 3 plus bas.
 
 ## Aucun test ne touche au réseau
 
@@ -404,6 +409,183 @@ def test_silencieuse_ne_vaut_que_zero():
     assert SourceLue("A", 0).silencieuse is True
     assert SourceLue("A", 1).silencieuse is False
     assert SourceLue("A", 0, "ConnectionError").silencieuse is True
+
+
+# 3. Le jeu de caractères d'une page
+#
+# `fetch_page` rendait `response.text`, qui ne lit pas la page : il suit
+# l'en-tête `Content-Type`, et pour un `text/html` sans charset il retombe sur
+# ISO-8859-1. Les trois pages de studyinjapan.go.jp sont dans ce cas, et leur
+# texte arrivait en charabia, montants compris.
+#
+# Le défaut était invisible parce que les 14 autres sources actives déclarent
+# leur charset dans l'en-tête. Une source qui marche masque la source qui ne
+# marche pas.
+#
+# Ces tests ne touchent pas au réseau : la couture est `scraper.requests.get`,
+# la même que celle utilisée plus haut pour remplacer `fetch_page`.
+
+# L'en-tête exact que studyinjapan.go.jp renvoie pour ses trois pages, mesuré le
+# 29 septembre 2026 : `text/html`, sans charset, alors que la page en déclare un.
+ENTETE_SANS_CHARSET = "text/html"
+
+
+class ReponseFactice:
+    """Ce que `fetch_page` utilise d'une réponse : statut, en-têtes, octets."""
+
+    def __init__(self, content_type, content, status=200):
+        self.headers = {"Content-Type": content_type} if content_type else {}
+        self.content = content
+        self.status_code = status
+        self.encoding = None
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+
+def reponse(monkeypatch, content_type, content, status=200):
+    """Fait répondre `requests.get` par une réponse faite main."""
+    factice = ReponseFactice(content_type, content, status)
+    monkeypatch.setattr(scraper.requests, "get", lambda *a, **k: factice)
+    return factice
+
+
+def test_le_jeu_de_l_entete_l_emporte_sur_celui_de_la_page():
+    # Un serveur qui déclare sait ce qu'il a envoyé : sa déclaration passe
+    # avant celle du document, même si le document en porte une autre.
+    octets = b"<meta charset='utf-8'><p>Master</p>"
+    assert scraper.nom_du_jeu_de_caracteres("text/html; charset=windows-1252", octets) == "windows-1252"
+
+
+def test_sans_charset_dans_l_entete_la_declaration_de_la_page_est_suivie():
+    # Le cas mesuré sur studyinjapan.go.jp.
+    octets = b"<html><head><meta charset='UTF-8'></head><body><p>x</p>"
+    assert scraper.nom_du_jeu_de_caracteres(ENTETE_SANS_CHARSET, octets) == "utf-8"
+
+
+def test_sans_une_seule_declaration_utf8_est_retenu():
+    assert scraper.nom_du_jeu_de_caracteres("text/html", b"<p>Master</p>") == "utf-8"
+    assert scraper.nom_du_jeu_de_caracteres("", b"<p>Master</p>") == "utf-8"
+
+
+def test_suivre_la_page_ce_nest_pas_deviner_utf8():
+    # La distinction qui compte, et que le cas précédent ne voit pas : une page
+    # peut déclarer autre chose que UTF-8. Un repli sur « utf-8 » au lieu de
+    # « la déclaration » donnerait la même réponse ici, et une page Latin-1
+    # serait alors jugée illisible alors qu'elle est parfaitement lisible.
+    #
+    # Ce test a été ajouté après une épreuve de mutations : il manquait, et la
+    # mutation « plus de repli sur la déclaration » passait la suite entière.
+    octets = "<meta charset='iso-8859-1'><p>café</p>".encode("iso-8859-1")
+    assert scraper.nom_du_jeu_de_caracteres("text/html", octets) == "iso-8859-1"
+
+
+def test_suivre_la_page_ce_nest_pas_lire_au_dela_de_la_fenetre():
+    # Symétrique du précédent, trouvé par la même épreuve. Une fenêtre trop
+    # courte ferait ignorer une page qui déclare son jeu à 100 octets, c'est-à-dire
+    # normalement ; le test suivant ne le verrait pas, il ne verrait qu'un repli
+    # qui fonctionne.
+    declaration_normale = b"<p>" + b"x" * 100 + b"<meta charset='iso-8859-1'>"
+    assert scraper.nom_du_jeu_de_caracteres("text/html", declaration_normale) == "iso-8859-1"
+
+
+def test_une_declaration_tardive_ne_compte_pas():
+    # La spécification du HTML réserve les 2048 premiers octets à cette
+    # recherche. Une déclaration plus loin peut venir d'un commentaire, et la
+    # prendre reviendrait à croire une phrase qui n'est pas une declaration.
+    tardive = b"<p>" + b"x" * 3000 + b"<meta charset='iso-8859-1'>"
+    assert scraper.nom_du_jeu_de_caracteres("text/html", tardive) == "utf-8"
+
+
+def test_une_page_sans_charset_dans_l_entete_est_lue_sans_charabia(monkeypatch):
+    # La non-regression du défaut. L'octet 0xC2 suivi de 0xA5 est le yen : lu
+    # en Latin-1 il devient deux caractères accentués, et le montant passe de
+    # « ¥143,000 » à « Â¥143,000 » sans lever la moindre erreur.
+    octets = "<p>\u00a5143,000 par mois</p>".encode("utf-8")
+    reponse(monkeypatch, ENTETE_SANS_CHARSET, octets)
+
+    html = scraper.fetch_page("https://exemple.test/")
+
+    assert "\u00a5143,000" in html
+    assert "\u00c2" not in html, "la page a ete relue en Latin-1"
+
+
+def test_le_jeu_de_l_entete_gagne_quand_la_page_en_declare_un_autre(monkeypatch):
+    # Le cas de 14 sources actives. Leur résultat doit être inchangé, sinon le
+    # correctif aurait cassé ce qui marche pour réparer ce qui ne marche pas.
+    octets = "caf\u00e9".encode("utf-8")
+    reponse(monkeypatch, "text/html; charset=utf-8", b"<meta charset='windows-1252'>" + octets)
+
+    assert scraper.fetch_page("https://exemple.test/").count("caf\u00e9") == 1
+
+
+def test_le_decodage_est_strict_et_nomme_le_jeu_dans_son_erreur(monkeypatch):
+    # `response.text` aurait remplacé l'octet douteux par U+FFFD et rendu une
+    # page à moitie lisible, sans rien dire. Ici la source est signalée, et le
+    # message nomme le jeu : sans lui, un octet douteux se confond avec une
+    # panne réseau et la source disparaît sans trace.
+    reponse(monkeypatch, "text/html; charset=utf-8", b"<p>caf\xe9</p>")
+
+    with pytest.raises(ValueError) as echec:
+        scraper.fetch_page("https://exemple.test/")
+
+    assert "utf-8" in str(echec.value)
+
+
+@pytest.mark.parametrize(
+    "content_type, octets, jeu",
+    [
+        # Des octets invalides pour le jeu annonce.
+        ("text/html; charset=utf-8", b"<p>caf\xe9</p>", "utf-8"),
+        # Un jeu que Python ne connait pas. `nom_du_jeu_de_caracteres` le rend
+        # tel quel, volontairement : c'est le decodage qui doit dire qu'il est
+        # inutilisable, pas une liste de noms devinette a l'avance.
+        ("text/html; charset=latin-9-inconnu", b"<p>Master</p>", "latin-9-inconnu"),
+    ],
+)
+def test_les_deux_causes_d_echec_ont_le_meme_forme(monkeypatch, content_type, octets, jeu):
+    # `collect_opportunities` enregistre le type de l'exception, pas son texte.
+    # Deux causes qui lèvent deux types différents inscriraient deux pannes
+    # distinctes dans le journal alors que c'est la même : la page est
+    # illisible. Une seule forme, et un message qui commence par nommer le jeu
+    # retenu.
+    #
+    # Le test vérifie aussi que l'erreur n'est *pas* l'exception d'origine.
+    # `UnicodeDecodeError` hérite de `ValueError`, donc `pytest.raises(ValueError)`
+    # passerait aussi sans le `from erreur` : c'est le préfixe du message qui
+    # distingue les deux.
+    reponse(monkeypatch, content_type, octets)
+
+    with pytest.raises(ValueError) as echec:
+        scraper.fetch_page("https://exemple.test/")
+
+    message = str(echec.value)
+    assert message.startswith("page illisible en " + jeu), message
+    assert not isinstance(echec.value, (LookupError, UnicodeDecodeError))
+
+
+def test_une_page_lu_ne_contient_jamais_de_caractere_de_remplacement(monkeypatch):
+    # Propriete, pas un cas : quelle que soit la page, aucun U+FFFD ne doit
+    # atteindre `data/`. C'est la consequence de la strictesse, et elle se
+    # verifie sur plusieurs encodages, pas sur un seul.
+    pages = [
+        ("text/html; charset=utf-8", "Master in \u00c9lectronique".encode("utf-8")),
+        ("text/html; charset=windows-1252", "Master in \u00c9lectronique".encode("windows-1252")),
+        (ENTETE_SANS_CHARSET, "<p>\u4e2d\u6587</p>".encode("utf-8")),
+    ]
+    for content_type, octets in pages:
+        reponse(monkeypatch, content_type, octets)
+        assert "\ufffd" not in scraper.fetch_page("https://exemple.test/")
+
+
+def test_un_erreur_http_est_relayee_avant_toute_decodage(monkeypatch):
+    # L'ordre compte : un 412 sur une page illisible doit dire 412, pas
+    # « page illisible ». Le code HTTP est le fait le plus utile.
+    reponse(monkeypatch, "text/html; charset=utf-8", b"<p>caf\xe9</p>", status=412)
+
+    with pytest.raises(requests.HTTPError):
+        scraper.fetch_page("https://exemple.test/")
 
 
 if __name__ == "__main__":

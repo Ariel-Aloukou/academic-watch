@@ -13,6 +13,7 @@ main et écrit dans docs/SOURCES.md, pas ici : un test qui dépend d'un site
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -454,6 +455,166 @@ def test_une_aide_sans_frais_de_scolarite_prend_zero():
     resultat = mesure(bourse(financement="Monthly stipend"), "financement")
     assert resultat["points"] == 0
     assert "aucune prise en charge" in resultat["raison"]
+
+
+# 5 ter. Ce que « graduate » désigne : un niveau, ou des personnes
+#
+# `NIVEAUX_LARGES` contenait « graduate », trouvé seul. Mesuré le 29 septembre
+# 2026, cela valait 40 points à cinq phrases sur sept de la page MEXT, dont
+# aucune n'offrait de Master : « a graduate of a college », « university or
+# college graduates who have practical work experience », « includes prospective
+# graduates ». Une bourse de sortants de lycée arrivait en tête de bulletin à
+# 90/100.
+#
+# Les 16 phrases ci-dessous sont les occurrences réelles, entières, pas des
+# exemples inventés : 9 du corpus (7 titres KAIST, 1 éligibilité KAIST,
+# 1 description TUM) et 7 de phrases relevées dans la V0.12. Chacune est
+# déclarée avec le sens qu'elle a, et la propriété est vérifiée deux fois : une
+# fois phrase par phrase, une fois sur la liste entière.
+
+
+# (sens, texte) — « niveau » ouvre, « personnes » n'ouvre pas, « ni l'un ni
+# l'autre » ne contient pas le mot et doit rester indifférent.
+PHRASES_GRADUATE = [
+    ("niveau", "Graduate School of Medical Science and Engineering"),
+    ("niveau", "Graduate School of Information Security"),
+    ("niveau", "The Kim Jaechul Graduate School of AI"),
+    ("niveau", "Graduate School of Data Science"),
+    ("niveau", "Cho Chun Shik Graduate School of Mobility"),
+    ("niveau", "Graduate School of Culture Technology"),
+    ("niveau", "Graduate School of Science and Technology Policy"),
+    ("niveau", "Open to international applicants for KAIST graduate programs"),
+    ("personnes", "the program is conducted in Singapore and serves to provide graduates with an in-depth knowledge"),
+    ("personnes", "high school graduates"),
+    ("personnes", "college graduates who have practical work experience"),
+    ("personnes", "university graduates with 5 years of teaching experience"),
+    ("personnes", "graduates of a high school"),
+    ("niveau", "postgraduate programs in engineering"),
+    ("niveau", "postgraduate degree"),
+    ("ni l'un ni l'autre", "undergraduate students"),
+]
+
+
+@pytest.mark.parametrize("sens, texte", PHRASES_GRADUATE, ids=[t[1][:44] for t in PHRASES_GRADUATE])
+def test_chaque_phrase_du_corpus_est_classee_du_bon_cote(sens, texte):
+    resultat = mesure(bourse(diplome=None, eligibilite=[texte]), "niveau")
+    if sens == "ni l'un ni l'autre":
+        # « undergraduate » ne contient pas « graduate » : la règle n'a rien à
+        # dire, et le dire est la moitié du travail.
+        assert resultat["points"] == 0
+    else:
+        assert (resultat["points"] == 40) == (sens == "niveau"), (sens, texte, resultat)
+
+
+def test_chaque_phrase_a_son_sens_declare():
+    # La liste et sa déclaration ne peuvent pas diverger en silence : une phrase
+    # ajoutée sans sens donnerait un test qui passe pour la mauvaise raison, et
+    # c'est exactement ce que le test précédent ne peut pas voir.
+    #
+    # « ni l'un ni l'autre » ne veut pas dire « sans la lettre » : « undergraduate
+    # » contient bien « graduat ». Il veut dire « sans le mot », donc la recherche
+    # se fait par mot entier. C'est la distinction que `contient_mot` existe pour
+    # garder, et elle est vérifiée ici plutôt que supposée.
+    for sens, texte in PHRASES_GRADUATE:
+        assert sens in {"niveau", "personnes", "ni l'un ni l'autre"}, (sens, texte)
+        assert texte.strip() == texte and texte, texte
+        if sens == "ni l'un ni l'autre":
+            assert re.search(r"\b(?:graduate|postgraduates?)\b", texte, re.IGNORECASE) is None, texte
+            assert "graduat" in texte.lower(), (texte, "ne contient meme pas la lettre")
+        else:
+            # `\bgraduates?\b` ne verrait pas « postgraduate » : c'est le faux
+            # negatif que la V0.13 corrige, donc la verification porte sur les
+            # deux mots de `NIVEAUX_LARGES`, au nombre compris.
+            alternatives = "|".join(matches.NIVEAUX_LARGES)
+            motif = r"\b(?:" + alternatives + r")s?\b"
+            assert re.search(motif, texte, re.IGNORECASE) is not None, (
+                texte,
+                "ne contient aucun des mots de NIVEAUX_LARGES",
+            )
+
+
+def test_le_niveau_ne_vient_pas_du_mot_mais_de_ce_qui_le_suit():
+    # Les deux phrases ne contiennent pas le meme nombre d'occurrences du mot,
+    # ni les memes formes. Elles ne different que par le mot d'apres, et c'est
+    # la seule distinction que la regle utilise.
+    college = mesure(
+        bourse(diplome=None, eligibilite=["You must be a graduate of a college"]), "niveau"
+    )
+    ecole = mesure(
+        bourse(diplome=None, eligibilite=["Admission to a Japanese graduate school"]), "niveau"
+    )
+    # Les deux phrases contiennent le mot, une fois chacune, et à la même
+    # place. Elles ne diffèrent que par le mot d'après, et c'est la seule
+    # distinction que la règle utilise.
+    college = mesure(
+        bourse(diplome=None, eligibilite=["You must be a graduate of a college"]), "niveau"
+    )
+    ecole = mesure(
+        bourse(diplome=None, eligibilite=["Admission to a Japanese graduate school"]), "niveau"
+    )
+    assert college["points"] == 0
+    assert ecole["points"] == 40
+
+def test_un_niveau_sans_mot_qui_le_suit_n_ouvre_rien():
+    # « includes prospective graduates » se termine la. Le mot y est, le niveau
+    # n'y est pas, et il n'y a rien derriere quoi le chercher.
+    resultat = mesure(
+        bourse(diplome=None, eligibilite=["completed 12 years of schooling (includes prospective graduates)"]),
+        "niveau",
+    )
+    assert resultat["points"] == 0
+
+
+def test_undergraduate_ne_compte_pas_pour_un_niveau_large():
+    # Le piege le plus evident, et le plus facile a reintroduire : « undergraduate »
+    # contient « graduate ». Une recherche par sous-chaine le ferait passer pour
+    # un niveau de Master, donc une bourse de premier cycle deviendrait une
+    # bourse de Master.
+    resultat = mesure(bourse(diplome=None, eligibilite=["undergraduate course"]), "niveau")
+    assert resultat["points"] == 0
+
+
+# Les mots de liaison qui font faux : ceux que la page écrit après « graduate »
+# quand elle parle de personnes. Les inscrire dans la liste d'inclusion
+# rétablirait d'un coup les cinq faux positifs, et c'est la faute la plus
+# probable de quelqu'un qui trouve un résultat qui ne lui convient pas.
+MOTS_DE_LIAISON_MEXT = ("of", "with", "who")
+
+
+@pytest.mark.parametrize("mot", MOTS_DE_LIAISON_MEXT)
+def test_un_mot_de_liaison_ne_peut_pas_entrer_dans_la_liste_des_niveaux(mot):
+    assert mot not in matches.MOTS_DE_NIVEAU
+    resultat = mesure(bourse(diplome=None, eligibilite=[f"a graduate {mot} a college"]), "niveau")
+    assert resultat["points"] == 0, mot
+
+
+def test_la_liste_des_niveaux_est_ce_qui_decide_et_non_les_niveaux():
+    # Les deux listes ne sont pas interchangeables. `NIVEAUX_LARGES` dit quels
+    # mots ouvrent une porte, `MOTS_DE_NIVEAU` dit ce qui doit les suivre. Les
+    # confondre, ou vider l'une des deux, ramene le defaut qu'elles corrigent.
+    assert matches.NIVEAUX_LARGES == ("graduate", "postgraduate")
+    assert matches.MOTS_DE_NIVEAU
+    assert not set(matches.NIVEAUX_LARGES) & set(matches.MOTS_DE_NIVEAU)
+
+
+def test_la_recherche_ne_compte_pas_sur_la_maniere_du_caller_de_l_ecrire():
+    # Les sept titres de KAIST commencent par une majuscule, et c'est le seul
+    # endroit du corpus où « Graduate » n'est pas en minuscule. Appeler la
+    # fonction directement, sans passer par `niveau_atteignable` qui met déjà le
+    # texte en minuscules, vérifie qu'elle normalise elle-même. Sans ce test, la
+    # normalisation pourrait disparaître de la fonction sans qu'on le voie :
+    # `niveau_atteignable` la ferait encore, et la suite resterait verte.
+    assert matches.niveau_large_mentionne("Graduate School of AI") is True
+    assert matches.niveau_large_mentionne("GRADUATE SCHOOL OF AI") is True
+    assert matches.niveau_large_mentionne("you must be a Graduate of a college") is False
+
+
+def test_la_fonction_renvoie_un_booléen_et_pas_une_correspondance():
+    # Une fonction de recherche qui renvoyait un objet truthy passerait les
+    # tests d'assertion sans dire ce qu'elle répond. Elle est appelée dans une
+    # condition, donc un résultat trompeur se propagerait jusqu'à la retenue.
+    assert matches.niveau_large_mentionne("graduate programs") is True
+    assert matches.niveau_large_mentionne("graduates of a college") is False
 
 
 # 6. La porte et le classement

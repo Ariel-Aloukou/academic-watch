@@ -1938,6 +1938,449 @@ la différence entre une mesure et une veille, et c'est ici qu'elle compte.
   refusée ne se surveille pas, donc la page peut changer sans que rien ne
   s'en aperçoive.
 
+# V0.13 - Corriger les deux défauts trouvés en cherchant une source
+
+La V0.12 a refusé MEXT et a laissé deux défauts derrière elle, tous deux
+mesurés, tous deux écrits, aucun corrigé. Ils étaient tous deux dans le code du
+projet et non dans la page : c'est ce qui les rendait dangereux, parce qu'ils
+n'auraient rien dit jusqu'au jour où une nouvelle bourse les aurait révélés. La
+V0.13 les corrige tous les deux, et elle commence par les mesurer encore, parce
+qu'une correction non mesurée n'est qu'un changement d'impression.
+
+Rien n'est écrit dans `config/` ni dans `data/` par cette version. Le registre,
+les blocs de sélecteurs et l'historique sont inchangés, et le fichier de
+données est restitué à l'octet.
+
+## Le résumé, en deux tableaux
+
+| Défaut | Avant | Après |
+|---|---|---|
+| `fetch_page` suit l'en-tête, pas la page | 3 pages lues de travers | 0 page lue de travers |
+| `niveau` prend « graduate » pour un niveau | 5 faux positifs, 2 faux négatifs | 0 et 0 |
+| Opportunités collectées | 110 | 110 |
+| Opportunités retenues | 12 | 12 |
+| Tests | 408 | 436 |
+
+Les 110 et les 12 sont le résultat qui compte le plus : les deux corrections
+visent des phrases qui n'arrivaient pas dans le bulletin, et aucune des deux ne
+doit faire disparaître une ligne.
+
+## 1. Le jeu de caractères de la page
+
+### 1.1 Ce que la mesure a donné, et où
+
+La V0.12 avait mesuré MEXT. La question de la V0.13 est plus large : est-ce que
+le défaut concerne cette page, ou toutes celles qui n'ont pas de charset dans
+leur en-tête ? Mesuré le 29 septembre 2026 sur les **17 sources activées** :
+
+| Source | HTTP | En-tête | Déclaration de page | Lecture de `requests` | Octets non ASCII |
+|---|---|---|---|---|---|
+| TUM - Degree programs | 200 | utf-8 | utf-8 | utf-8 | 157 |
+| NTNU - Master's programmes in English | 200 | utf-8 | utf-8 | UTF-8 | 72 |
+| KAIST - Explore Programs | 200 | utf-8 | aucune | utf-8 | 636 |
+| KAIST - Scholarship | 200 | utf-8 | aucune | utf-8 | 663 |
+| EduCanada - Programmes | 200 | utf-8 | utf-8 | utf-8 | 8 |
+| EduCanada - Bourses internationales | 200 | utf-8 | utf-8 | utf-8 | 8 |
+| DAAD - Scholarship Database | 200 | utf-8 | utf-8 | UTF-8 | 0 |
+| **Study in Japan** | 200 | **aucun** | utf-8 | **ISO-8859-1** | 266 |
+| **Study in Japan - MEXT** | 200 | **aucun** | utf-8 | **ISO-8859-1** | 198 |
+| **Study in Japan - Scholarships** | 200 | **aucun** | utf-8 | **ISO-8859-1** | 188 |
+| Study in Korea - Scholarships | 200 | utf-8 | utf-8 | UTF-8 | 3 079 |
+| Study in Korea | 200 | utf-8 | utf-8 | UTF-8 | 5 133 |
+| Study in Norway | 200 | utf-8 | utf-8 | utf-8 | 41 |
+| Erasmus Mundus Joint Masters | 200 | utf-8 | utf-8 | utf-8 | 74 |
+| EACEA - Erasmus Mundus catalogue | 200 | utf-8 | utf-8 | utf-8 | 107 |
+| Campus China | — | `ConnectionError` | — | — | — |
+| Study in China - CSC | 412 | utf-8 | utf-8 | utf-8 | 0 |
+
+**Trois pages sont concernées, pas une.** Les trois de `studyinjapan.go.jp`,
+et elles le sont pour la même raison : le serveur répond `Content-Type: text/html`
+sans nommer de jeu, et la page en déclare un elle-même. Les 14 autres l'annoncent
+dans l'en-tête, ce qui est pourquoi le défaut est resté invisible.
+
+Une source qui marche masque une source qui ne marche pas. C'est le même
+raisonnement que la règle de `silencieuse`, appliquée à l'encodage : on ne voit
+pas un champ qu'on ne remplit pas.
+
+### 1.2 La règle : trois autorités, dans l'ordre qui fait autorité
+
+```
+1. l'en-tête Content-Type, quand il nomme un charset
+2. la déclaration de la page, dans les 2048 premiers octets
+3. UTF-8, à défaut de toute déclaration
+```
+
+L'ordre est celui du HTML lui-même, et la deuxième ligne est celle qui sauve
+`studyinjapan.go.jp`. La troisième mérite un mot : la spécification préfère
+`windows-1252`, pas UTF-8. Le projet retient UTF-8 quand même, et le dit, parce
+qu'une page sans accents se lit identiquement dans les deux cas — la V0.13 a
+mesuré une page 100 % ASCII pour s'en assurer, les deux lectures y sont
+identiques — alors qu'une page *avec* accents devient du charabia sous
+`windows-1252`.
+Les 2048 premiers octets ne sont pas un nombre choisi : c'est la fenêtre que la
+spécification réserve à cette recherche, et une déclaration plus loin peut venir
+d'un commentaire plutôt que de l'en-tête du document.
+
+### 1.3 Ce que la correction produit, page par page
+
+Lecture de la même page par l'ancien chemin et par le nouveau, au même moment :
+
+| Page | Longueur avant | Longueur après | Première divergence | Signes de charabia |
+|---|---|---|---|---|
+| Study in Japan | 32 913 car. | 32 741 car. | 3 657 | 13 → 0 |
+| Study in Japan - MEXT | 28 825 car. | 28 699 car. | 617 | 14 → 0 |
+| Study in Japan - Scholarships | 16 861 car. | 16 741 car. | 591 | 9 → 0 |
+
+Le passage à la bonne lecture **raccourcit** le texte, et c'est le signe qu'il
+s'agit d'une correction et non d'un décalage : en UTF-8, un caractère japonais
+occupe trois octets et un caractère, alors qu'en Latin-1 il devenait trois
+caractères. 126 caractères de moins sur MEXT, et 198 octets non ASCII : les deux
+nombres se répondent.
+
+Les trois divergences, en clair. Les deux caractères corrects ne sont pas
+écrits : ce sont des formes de pleine largeur, U+FF5C pour la barre verticale du
+titre et U+FF5E pour la tilde des montants, et `tests/test_proprete.py` les
+interdit dans `docs/`. Le dépôt ne peut donc pas montrer ce qu'il répare, il
+peut seulement le nommer. Le mojibake, lui, s'écrit : il ne contient que des
+caractères latins, plus un octet de contrôle qu'on ne peut pas non plus écrire,
+donc nommé lui aussi.
+
+| Page | Avant | Après |
+|---|---|---|
+| Study in Japan | le mot japonais en six caractères latins, `æ` `¥` `æ` puis un octet de contrôle | le mot, en un caractère |
+| MEXT | `Scholarship` + trois caractères de mojibake + `Study in Japan` | `Scholarship` + U+FF5C + `Study in Japan` |
+| Scholarships | `Scholarships` + trois caractères de mojibake + `Study in Japan` | `Scholarships` + U+FF5C + `Study in Japan` |
+| MEXT, montants | `Â¥143,000`, la somme à deviner | `¥143,000` + U+FF5E + `145,000 per month` |
+
+La première divergence de MEXT est au caractère **617**, le même que celui
+relevé en V0.12 sur une autre méthode de lecture. Deux mesures indépendantes
+qui tombent au même endroit, c'est la confirmation qu'il n'y a pas de mesure
+fausse derrière l'une des deux.
+
+### 1.4 Deux propriétés que la correction doit garantir
+
+**Le décodage est strict.** `response.text` remplace les octets douteux par
+`U+FFFD` et rend quand même une page à moitié lisible, sans rien dire. La
+correction échoue, et le message nomme le jeu retenu. C'est mesuré sans danger :
+sur les 15 sources qui répondent, **aucune n'a le moindre octet invalide** pour
+le jeu qu'elle déclare, et le relevé de `U+FFFD` par la lecture actuelle est de
+**zéro** sur les quinze. Un décodage strict ne fait donc perdre aucune source.
+
+**Les deux causes d'échec ont la même forme.** `collect_opportunities`
+enregistre `type(erreur).__name__`, pas le texte. Un jeu inconnu et des octets
+invalides lèvent naturellement deux types différents, et le journal inscrirait
+deux pannes distinctes alors que c'est la même : la page est illisible. Les deux
+passent par un `ValueError` dont le message commence par nommer le jeu. Le test
+qui verrouille cela vérifie aussi que l'erreur n'est *pas* l'exception d'origine,
+parce que `UnicodeDecodeError` hérite de `ValueError` : sans ce test, un
+`pytest.raises(ValueError)` passerait aussi sans la correction.
+
+### 1.5 Un fait que la panne cachait
+
+La page MEXT contient des caractères de **pleine largeur** : U+FF5C dans son
+titre, U+FF5E dans ses montants. Avant la correction, ils n'arrivaient pas en
+tant que tels — ils arrivaient en trois caractères latins mojibakés, que rien ne
+reconnaît comme une forme de pleine largeur. La correction ne crée pas ce
+problème, elle le révèle.
+
+Il n'y a pas de conflit avec `tests/test_proprete.py` : le test d'hygiène
+interdit la pleine largeur et le CJK dans `src`, `config`, `docs`, `tests` et
+`.github`, et **exempte `data/`**, qui n'est contrôlé que pour l'UTF-8, les
+tabulations, les espaces en fin de ligne et la ligne vide finale. C'est le bon
+partage : une page japonaise peut écrire du japonais, le dépôt ne le peut pas.
+
+### 1.6 Tests et mutations
+
+Dix tests, dont deux que l'épreuve de mutations a rendu nécessaires.
+
+Le module affirmait dans son propre docstring que `fetch_page` n'était **pas**
+couvert, avec une raison écrite : le tester demanderait une seconde couture
+d'injection. La couture existait déjà — les tests de `collect_opportunities`
+remplacent `fetch_page` par un monkeypatch. L'affirmation est donc devenue
+fausse et a été corrigée avec le code, parce qu'un docstring qui prétend qu'un
+code n'est pas testé alors qu'il l'est apprend au lecteur à ignorer le
+docstring.
+
+| Mutation | Détectée |
+|---|---|
+| plus de repli sur la déclaration de la page | oui |
+| la page l'emporte sur l'en-tête (ordre inverse) | oui |
+| la fenêtre de déclaration devient illimitée | oui |
+| la fenêtre de déclaration devient trop courte | oui |
+| le décodage devient permissif (`errors="replace"`) | oui |
+| l'erreur ne nomme plus le jeu | oui |
+
+Les mutations 1 et 4 ont d'abord **survécu**, et c'est ce qui a valu les deux
+tests ajoutés ensuite. La mutation 1 retirait le repli sur la déclaration de la
+page sans qu'aucun test ne le voie : tous les cas d'essai utilisaient une page
+UTF-8, et « supposer UTF-8 » et « lire la déclaration » donnent la même réponse.
+Le test ajouté — une page qui déclare `iso-8859-1` et contient `0xE9` — oblige
+la fonction à lire la déclaration, et non à deviner. La mutation 4 réduisait la
+fenêtre à un octet, ce qui fait que le test « une déclaration tardive ne compte
+pas » passait quand même : il vérifiait qu'on ne lit pas trop loin, jamais qu'on
+lit assez près. Le symétrique a été ajouté.
+
+## 2. Le critère `niveau`
+
+### 2.1 La mesure, avant la règle
+
+La V0.12 avait conclu sur 8 phrases. La V0.13 repart du corpus entier, parce
+qu'une conclusion sur 8 phrases n'est pas une conclusion. Sur la collecte du
+jour — **110 opportunités, 192 textes, 5 sources** — le mot `graduate` et ses
+voisins apparaissent **10 fois**, et **3 mots seulement** les suivent :
+
+| Occurrences | Suite | Sens |
+|---|---|---|
+| 7 | `graduate school` | le niveau offert — « The Kim Jaechul Graduate School of AI » |
+| 2 | `graduate programs` | le niveau offert — « KAIST graduate programs » |
+| 1 | `graduate with` | des personnes — « serves to provide graduates with an in-depth knowledge » (TUM) |
+
+Les 9 premières sont de vraies bourses de Master. La dixième ne dit rien du
+niveau d'entrée. Sur les 7 lignes d'éligibilité de MEXT, `graduate` apparaît
+**5 fois**, et les 5 fois pour désigner le diplôme **déjà obtenu** par le
+candidat.
+
+Il y a aussi un faux négatif que la V0.12 n'avait pas nommé : le motif
+`\bgraduates?\b` ne voit pas `postgraduate`, car le `t` de `post` n'est pas
+une frontière de mot.
+Une offre écrivant « postgraduate programs » passait pour un niveau sans rapport
+avec le Master visé. Mesuré : `postgraduate programs in engineering` et
+`postgraduate degree` étaient tous deux rejetés.
+
+### 2.2 La première règle, et pourquoi elle ne suffisait pas
+
+La première correction essayée — et la plus simple — n'acceptait que le
+**singulier** : au pluriel, `graduate` nomme des personnes.
+
+Elle corrigeait 4 des 5 faux positifs de MEXT, et **en laissait un**. La ligne
+`Teacher training students` se lit :
+
+> You must be under 35 years of age and a **graduate of** a college or teacher
+> training college.
+
+`graduate` y est au singulier, et la phrase décrit un diplôme de fin de
+collège, pas un niveau de Master. Une fois sur cinq, le nombre ne suffisait pas.
+
+C'est ce qui a fait abandonner la règle du nombre : elle corrigeait 80 % du
+défaut tout en donnant l'illusion d'être la règle. Une règle qui échoue une fois
+sur cinq sur un jeu de phrases connu est une règle qu'on ne peut pas présenter
+comme la règle.
+
+### 2.3 La règle retenue : ce qui suit le mot
+
+Ce qui distingue les deux sens n'est ni le mot ni son nombre, c'est **le mot
+d'après** :
+
+| Phrase | Mot suivant | Verdict |
+|---|---|---|
+| admission to a Japanese **graduate school** | `school` | niveau offert |
+| open to applicants for KAIST **graduate programs** | `programs` | niveau offert |
+| you must be a **graduate of** a college | `of` | une personne |
+| university or college **graduates who** have experience | `who` | des personnes |
+| provides **graduates with** an in-depth knowledge | `with` | des personnes |
+| 12 years of schooling (**includes prospective graduates**) | rien | des personnes |
+
+La règle exige donc que le mot soit **suivi d'un mot de `MOTS_DE_NIVEAU`**, et
+qu'il y en ait un. Une occurrence sans mot suivant est écartée : « high school
+graduates » se termine là, et son sens n'est pas ambigu.
+
+### 2.4 Pourquoi une liste d'inclusion, et pas son contraire
+
+La règle pouvait se poser en « `graduate` suivi d'un mot qui n'est pas une
+fonction », ou l'inverse. Les deux ont été essayées. La seconde est retenue, et
+la raison n'est pas la commodité : **son erreur est dans le bon sens**.
+
+Une liste d'exclusion se trompe sur un mot qu'elle ne connaissait pas — un
+adverbe, une préposition rare — et compte alors comme niveau une bourse de
+sortants de lycée. C'est le défaut qu'elle est censée supprimer, et il reviendrait
+par la porte du vocabulaire. Une liste d'inclusion se trompe sur un nom de
+niveau qu'elle ne connaissait pas, et perd une vraie bourse : la ligne passe
+inaperçue. **Une veille perd une ligne, ou bien elle annonce en tête de bulletin
+une bourse à laquelle l'étudiant n'a pas droit.** La seconde erreur coûte plus.
+
+`MOTS_DE_NIVEAU` contient 20 entrées. Trois familles, et chacune est
+rattachée à une mesure :
+
+* `school`, `programs` — les 9 occurrences réelles du corpus, sans exception ;
+* `of`, `with`, `who` sont **exclus**, et c'est mesuré : ce sont les 3 suites
+  des 5 occurrences de MEXT. Un test vérifie qu'un mot de liaison ne peut pas
+  entrer dans la liste, parce que ce serait la façon la plus probable de «
+  réparer » un résultat qui déplaît ;
+* `level`, `degree`, `studies`, `course`, `student`, `training`, `year`,
+  `semester`, `education` — le tableau des montants de MEXT, qui écrit
+  « Graduate school **level** », et les formulations de niveau des autres pages
+  lues.
+
+Limite assumée, et elle est dans le commentaire de la constante : une page qui
+écrirait « graduate certificate » ou « graduate pathway » ne serait pas vue
+comme un niveau. Le code ne comprend pas l'anglais ; il retient ce que les pages
+réellement lues écrivent.
+
+### 2.5 Les 16 phrases, avant et après
+
+Les 16 phrases sont entières, pas des exemples : 9 du corpus (7 titres KAIST,
+1 éligibilité KAIST, 1 description TUM) et 7 relevées en V0.12 ou en V0.13.
+
+| Phrase | Avant | Après | Sens réel |
+|---|---|---|---|
+| Graduate School of Medical Science and Engineering | 40 | 40 | niveau |
+| Graduate School of Information Security | 40 | 40 | niveau |
+| The Kim Jaechul Graduate School of AI | 40 | 40 | niveau |
+| Graduate School of Data Science | 40 | 40 | niveau |
+| Cho Chun Shik Graduate School of Mobility | 40 | 40 | niveau |
+| Graduate School of Culture Technology | 40 | 40 | niveau |
+| Graduate School of Science and Technology Policy | 40 | 40 | niveau |
+| Open to international applicants for KAIST graduate programs | 40 | 40 | niveau |
+| serves to provide graduates with an in-depth knowledge | 40 | **0** | personnes |
+| high school graduates | 40 | **0** | personnes |
+| college graduates who have practical work experience | 40 | **0** | personnes |
+| university graduates with 5 years of teaching experience | 40 | **0** | personnes |
+| graduates of a high school | 40 | **0** | personnes |
+| postgraduate programs in engineering | **0** | 40 | niveau |
+| postgraduate degree | **0** | 40 | niveau |
+| undergraduate students | 0 | 0 | ni l'un ni l'autre |
+
+**5 faux positifs et 2 faux négatifs avant, 0 et 0 après.** Le compte de la V0.12
+était de 4 et 1 : il portait sur 8 phrases, le corpus complet en a 16, et les 8
+supplémentaires sont celles qui manquaient. Le chiffre de la V0.12 n'était pas
+faux, il était incomplet.
+
+La dernière ligne est un contre-test : « undergraduate » contient bien la
+suite de lettres `graduat`, et la règle doit le laisser à zéro malgré ça.
+
+### 2.6 MEXT : la simulation, rejouée avec le code corrigé
+
+La simulation de la V0.12 construit les 7 types que publie la page et appelle
+le vrai `evaluer`. Elle est relancée telle quelle :
+
+| Lecture | V0.12 | V0.13 | Retenue en V0.13 |
+|---|---|---|---|
+| A. Titre + éligibilité publiés | 0/7 | 0/7 | — |
+| B. A + montants publiés | 0/7 | 0/7 | — |
+| C. B + la phrase négative | **6/7 à 90/100** | **1/7 à 90/100** | `Research students` |
+| D. B + la phrase d'ouverture | **6/7 à 90/100** | **1/7 à 90/100** | `Research students` |
+| E. D, en gardant le type utile | 1/1 à 90/100 | 1/1 à 90/100 | `Research students` |
+
+C'est le résultat qui fait la version. En V0.12, les 6 retenues de la lecture C
+étaient **5 fausses** et une vraie : `Undergraduate students` (12 années de
+scolarité), `Teacher training` (diplôme de collège et 5 ans d'enseignement),
+`College of technology` (11 années), `Specialized training college` (12 années),
+`Young Leaders Program` (adultes avec expérience professionnelle). À 90/100, le
+maximum d'une bourse, elles auraient ouvert le bulletin.
+
+En V0.13, il reste une retenue sur sept, et c'est `Research students`, dont
+l'éligibilité publiée dit « eligible for admission to a **master's program** ».
+C'est la seule des sept qui soit réellement une bourse de Master.
+
+Les 7 lignes et leur réponse au critère, mesurées :
+
+| Type de bourse | Forme « graduat » dans l'éligibilité | V0.12 | V0.13 |
+|---|---|---|---|
+| Research students | `graduate` (at a Japanese graduate school) | 40 | 40 |
+| Teacher training students | `graduate` (a graduate **of** a college) | 40 | **0** |
+| Undergraduate students | `graduates` (includes prospective graduates) | 40 | **0** |
+| Japanese studies students | `undergraduate` | 0 | 0 |
+| College of technology students | `graduates` (includes prospective graduates) | 40 | **0** |
+| Specialized training college students | `graduates` (includes prospective graduates) | 40 | **0** |
+| Young Leaders Program (YLP) | `graduates` (college graduates **who**) | 40 | **0** |
+
+**5 lignes sur 7 changent de réponse, et ce sont exactement les 5 faux
+positifs.** La règle ne fait rien d'autre que ce qu'elle dit qu'elle fait, et
+c'est vérifiable ligne à ligne.
+
+### 2.7 L'effet sur la veille : rien, et c'est le résultat attendu
+
+| | Avant | Après |
+|---|---|---|
+| Opportunités collectées | 110 | 110 |
+| Opportunités retenues | 12 | 12 |
+| dont KAIST - Scholarship | 2 à 100/100 | 2 à 100/100 |
+| Textes où un niveau large est vu | 10 | 9 |
+
+Les 2 bourses KAIST sont les seules du corpus à dépendre de la règle, et leur
+motif reste « ouverte au niveau Master ». La 10ᵉ occurrence, celle de TUM, est
+la seule que la correction retire du texte : « serves to provide graduates with
+an in-depth knowledge » ne parle pas du niveau d'entrée, et personne n'en
+perdait rien.
+
+La veille ne change pas **parce que** les phrases visées n'arrivaient pas
+jusqu'à elle. C'est le même genre de correction que le décodage : visible sur
+les pages, invisible sur le bulletin, et c'est précisément pour cela qu'il
+fallait la faire avant d'ajouter une source et non après.
+
+### 2.8 Tests et mutations
+
+Vingt-quatre tests ajoutés dans `tests/test_correspondance.py`, dont un test
+paramétré sur les 16 phrases et un test qui **vérifie la liste des phrases
+contre son sens déclaré** : une phrase ajoutée sans son sens donnerait un test
+qui passe pour la mauvaise raison, et c'est ce que le test paramétré ne peut pas
+voir.
+
+Ce dernier test a échoué trois fois pendant qu'il s'écrivait, et ses trois échecs
+étaient justes : le motif `\bgraduates?\b` ne trouve pas « postgraduate », ne
+trouve pas « graduates » au pluriel, et trouve « undergraduate » par
+sous-chaîne. Le test
+a été corrigé, pas la règle : c'est lui qui était faux, et le dire ici vaut
+mieux qu'un test qui aurait été affaibli pour passer.
+
+| Mutation | Détectée |
+|---|---|
+| la liste de niveau est ignorée | oui |
+| « of » entre dans la liste des niveaux | oui |
+| le mot qui suit n'est plus exigé | oui |
+| « postgraduate » disparaît des niveaux larges | oui |
+| la recherche redevient une sous-chaîne | oui |
+| la fonction cesse de normaliser elle-même | oui |
+
+**Une mutation a été retirée, et c'est le résultat le plus honnête de la
+version.** « le pluriel est de nouveau accepté » — remplacer le motif par un
+motif où le `s` final passe — **survit** à la suite entière. Après vérification,
+ce n'est pas une lacune : sur les 16 phrases mesurées, le pluriel est toujours
+suivi soit d'un mot de liaison, soit de rien. Aucune phrase anglaise n'oppose
+`graduate school` et `graduates school`, donc la mutation ne change le résultat
+d'aucun texte plausible, et il n'existe pas de test qui puisse la voir. C'est un
+**mutant équivalent**, et le dire vaut mieux que d'inventer une phrase
+artificielle pour la faire tomber.
+
+## 3. Ce que la V0.13 ne change pas
+
+**MEXT reste refusée.** La correction du décodage et celle du niveau lèvent les
+deux raisons qui tenaient au code. La raison structurelle, elle, ne bouge pas :
+les 7 lignes d'éligibilité n'ont **aucun lien**, et `build_opportunity` écarte
+toute opportunité sans URL. Il faudrait un parseur dédié, donc du code, et la
+décision de la V0.12 est maintenue. Ce que la V0.13 change là-dessus est
+l'**honnêteté du dossier** : quand une lecture fidèle sera écrite, elle ne
+produira pas 5 fausses bourses à 90/100, elle en produira une vraie.
+
+**Le blocage de `international` reste entier.** La lecture C de la simulation
+ne fait passer `international` que par une phrase **négative** — « not all
+universities in Japan are able to recommend international students ». Le code ne
+comprend pas la négation, et l'élargissement de la V0.12 n'y change rien : il
+porte sur les formulations, pas sur le sens de la phrase.
+
+**Aucune source ajoutée, aucun bloc de sélecteurs écrit.** L'ordre de
+développement de `docs/VERSIONS.md` n'est pas modifié par cette version ; elle
+s'ajoute au cahier comme la V0.10, la V0.11 et la V0.12 l'ont fait.
+
+## 4. Les limites, écrites
+
+* **`MOTS_DE_NIVEAU` est une liste de 20 mots tirée de 5 pages.** Une page qui
+  écrit « graduate certificate » ou « graduate pathway » n'est pas vue comme un
+  niveau. Le défaut est dans le sens sûr — une ligne perdue, pas une fausse
+  bourse annoncée — mais il est réel, et il s'agrandira avec le corpus.
+* **Le décodage strict fait échouer une source au lieu de la dégrader.** C'est
+  voulu, et mesuré sans risque sur les 15 sources qui répondent aujourd'hui. Le
+  jour où une source publie un octet douteux, elle passera de « produit des
+  données avec un caractère parasite » à « en panne, nommée dans le journal ».
+  Les deux formes sont rendues par `collect_opportunities`, donc le rapport de
+  collecte la montrera.
+* **Les deux corrections sont invisibles sur le bulletin actuel**, parce que les
+  phrases visées n'y arrivaient pas. Elles ne le resteront pas : la prochaine
+  bourse ajoutée sera la première à passer par ce chemin.
+* **`FENETRE_DE_DECLARATION` vaut 2048 octets.** Une page qui déclare son jeu
+  plus tard ne sera pas lue correctement, et aucune source du registre n'est
+  dans ce cas.
+
 ---
 
 # V1.0 - Version fonctionnelle

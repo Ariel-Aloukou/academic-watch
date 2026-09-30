@@ -56,6 +56,20 @@ PROFILE_PATH = CONFIG_PATH / "profile.json"
 # l'exécution complète du programme.
 TIMEOUT_SECONDS = 30
 
+# Le jeu de caractères d'une page, lu dans l'ordre qui fait autorité : l'en-tête,
+# puis la déclaration de la page, puis ce défaut. Voir `nom_du_jeu_de_caracteres`
+# et le `fetch_page` qui l'appelle.
+CHARSET_DANS_ENTETE = re.compile(r"""charset\s*=\s*["']?\s*([a-zA-Z0-9_.:+-]+)""", re.IGNORECASE)
+# Sur les octets et non sur une chaîne : chercher une déclaration dans un texte
+# déjà décodé, avec un jeu que l'on ne connaît pas encore, serait circular.
+CHARSET_DANS_PAGE = re.compile(
+    rb"""<meta[^>]+charset\s*=\s*["']?\s*([a-zA-Z0-9_.:+-]+)""", re.IGNORECASE
+)
+# Les 2048 premiers octets : c'est la fenêtre que la spécification du HTML
+# réserve à la recherche de cette déclaration, et une page la place en tête.
+FENETRE_DE_DECLARATION = 2048
+JEU_PAR_DEFAUT = "utf-8"
+
 # Certains sites refusent les requêtes sans navigateur identifiable.
 USER_AGENT = "Mozilla/5.0 (compatible; AcademicWatch/0.2)"
 
@@ -347,9 +361,28 @@ def test_sources():
 def fetch_page(url):
     """Télécharge une page et retourne son contenu HTML.
 
-    Lève une erreur en cas de problème réseau ou de code HTTP non attendu :
-    une source en panne ne doit pas passer silencieusement pour une source
-    sans résultat.
+    Lève une erreur en cas de problème réseau, de code HTTP non attendu, ou de
+    contenu illisible : une source en panne ne doit pas passer silencieusement
+    pour une source sans résultat.
+
+    ## Pourquoi la page est décodée ici et pas par `response.text`
+
+    `response.text` ne lit pas la page : il suit l'en-tête `Content-Type`, et
+    pour un `text/html` sans charset il retombe sur ISO-8859-1. Les trois pages
+    de studyinjapan.go.jp sont dans ce cas — mesuré le 29 septembre 2026,
+    `Content-Type: text/html` sans charset, `charset="UTF-8"` déclaré dans la
+    page, 198 octets non ASCII sur MEXT. Leur texte arrivait donc en charabia,
+    et les montants de la bourse s'y lisaient `Â¥143,000`.
+
+    Le défaut était invisible parce que les 14 autres sources actives déclarent
+    leur charset dans l'en-tête. Une source qui marche masque la source qui ne
+    marche pas, jusqu'à ce qu'on ajoute celle-ci.
+
+    Le décodage est strict. `response.text` remplace les octets douteux par
+    `U+FFFD` et rend quand même une page à moitié lisible ; mesuré, aucune des
+    15 sources qui répondent n'a le moindre octet invalide pour le jeu qu'elle
+    déclare, donc la strictesse ne coûte aucune source et elle garantit
+    qu'aucun caractère parasite n'atteint `data/`.
     """
     response = requests.get(
         url,
@@ -357,7 +390,49 @@ def fetch_page(url):
         headers={"User-Agent": USER_AGENT},
     )
     response.raise_for_status()
-    return response.text
+
+    nom = nom_du_jeu_de_caracteres(
+        response.headers.get("Content-Type", ""), response.content
+    )
+    try:
+        return response.content.decode(nom)
+    except (LookupError, UnicodeDecodeError) as erreur:
+        # Le message nomme le jeu choisi : sans lui, un octet douteux se
+        # confonds avec une panne réseau, et la source disparaît sans trace.
+        raise ValueError(
+            f"page illisible en {nom} : {erreur}"
+        ) from erreur
+
+
+def nom_du_jeu_de_caracteres(content_type, octets):
+    """Renomme le jeu de caractères d'une page, dans l'ordre qui fait autorité.
+
+    Trois autorités, dans cet ordre, parce que c'est celui du HTML lui-même :
+
+    1. l'en-tête `Content-Type`, quand il nomme un charset. Un serveur qui
+      déclare est l'autorité la plus forte : il sait ce qu'il a envoyé ;
+    2. la déclaration de la page (`<meta charset>` ou
+       `<meta http-equiv="Content-Type">`), qui est une prise de position
+       explicite de l'auteur. C'est elle qui sauve studyinjapan.go.jp ;
+    3. UTF-8, faute de declaration. Ce n'est pas la règle du HTML, qui préfère
+       windows-1252, mais c'est le seul choix qui ne transforme pas une page
+       sans accents en charabia, et une page sans accents se lit de la même
+       façon dans les deux cas.
+
+    Une source déclarant un jeu inconnu n'est pas rejetée ici : le nom est
+    rendu tel quel, et c'est `fetch_page` qui produit une erreur nommant le jeu.
+    C'est volontaire — décider qu'un nom est inconnu ferait échouer des pages
+    parfaitement lisibles, et ce serait une invention.
+    """
+    trouve = CHARSET_DANS_ENTETE.search(content_type or "")
+    if trouve:
+        return trouve.group(1).lower()
+
+    trouve = CHARSET_DANS_PAGE.search(octets[:FENETRE_DE_DECLARATION])
+    if trouve:
+        return trouve.group(1).decode("ascii", "replace").lower()
+
+    return JEU_PAR_DEFAUT
 
 
 def read_text(element, selector):
