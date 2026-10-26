@@ -1303,8 +1303,8 @@
     "eligibility": [
       "Open to international applicants for KAIST graduate programs"
     ],
-    "description": "Departments Accepting Applications: All departments (except the Global Technology Innovation Program (GDI-GTIP Track)). | Admission Periods: Spring/Fall Early/Fall Regular | Eligibility Requirements: Open to international applicants for KAIST graduate programs | Benefits: Full tuition coverage, national health insurance, and a monthly stipend (dependent on research involvement) | Details: Select the KAIST scholarship option in your application. If eligible, accepted candidates will automatically be considered for the KGPS or KPS. | Remarks: The stipend amount may vary depending on individual colleges. For the College of Engineering, find more details about the stipend support they offer at",
-    "collected_at": "2026-09-26T04:14:45+00:00",
+    "description": "Departments Accepting Applications: All departments (except the Global Technology Innovation Program (GDI-GTIP Track)). | Admission Periods: Spring/Fall | Eligibility Requirements: Open to international applicants for KAIST graduate programs | Benefits: Full tuition coverage, national health insurance, and a monthly stipend (dependent on research involvement) | Details: Select the KAIST scholarship option in your application. If eligible, accepted candidates will automatically be considered for the KGPS or KPS. | Remarks: The stipend amount may vary depending on individual colleges. For the College of Engineering, find more details about the stipend support they offer at",
+    "collected_at": "2026-10-26T13:49:47+00:00",
     "score": 100,
     "matched_criteria": [
       "ouverte au niveau Master",
@@ -1333,8 +1333,8 @@
     "eligibility": [
       "Open to international applicants for Master’s or Master’s-Ph.D. Integrated programs"
     ],
-    "description": "Departments Accepting Applications: All departments( except the Global Technology Innovation Program (GDI-GTIP Track)). | Admission Periods: Spring/Fall Early/Fall Regular | Eligibility Requirements: Open to international applicants for Master’s or Master’s-Ph.D. Integrated programs | Benefits: Full tuition coverage and a monthly stipend of 1,000,000 KRW for 4 regular semesters | Details: Master’s or Master’s-Ph.D. Integrated program applicants for the KAIST scholarship are automatically considered for the KGPS. No separate application is necessary, but only highly competitive applicants will be recommended by the department head.",
-    "collected_at": "2026-09-26T04:14:45+00:00",
+    "description": "Departments Accepting Applications: All departments( except the Global Technology Innovation Program (GDI-GTIP Track)). | Admission Periods: Spring/Fall | Eligibility Requirements: Open to international applicants for Master’s or Master’s-Ph.D. Integrated programs | Benefits: Full tuition coverage and a monthly stipend of 1,000,000 KRW for 4 regular semesters | Details: Master’s or Master’s-Ph.D. Integrated program applicants for the KAIST scholarship are automatically considered for the KGPS. No separate application is necessary, but only highly competitive applicants will be recommended by the department head.",
+    "collected_at": "2026-10-26T13:49:47+00:00",
     "score": 100,
     "matched_criteria": [
       "ouverte au niveau Master",
@@ -1363,8 +1363,8 @@
     "eligibility": [
       "Open to international applicants for Master’s-Ph.D. Integrated or Ph.D. programs"
     ],
-    "description": "Departments Accepting Applications: All departments | Admission Periods: Spring/Fall Early/Fall Regular | Eligibility Requirements: Open to international applicants for Master’s-Ph.D. Integrated or Ph.D. programs | Benefits: Full tuition coverage and a monthly stipend of 300,000 KRW for 8 regular semesters (applicants admitted to the Master’s-Ph.D. Integrated program will receive the scholarship at the start of the Ph.D. program) | Details: Eligible applicants are automatically considered for the KPS. Those demonstrating outstanding academic and research achievements will receive recommendations from the department head, with final selection by the college dean.",
-    "collected_at": "2026-09-26T04:14:45+00:00",
+    "description": "Departments Accepting Applications: All departments | Admission Periods: Spring/Fall | Eligibility Requirements: Open to international applicants for Master’s-Ph.D. Integrated or Ph.D. programs | Benefits: Full tuition coverage and a monthly stipend of 300,000 KRW for 8 regular semesters (applicants admitted to the Master’s-Ph.D. Integrated program will receive the scholarship at the start of the Ph.D. program) | Details: Eligible applicants are automatically considered for the KPS. Those demonstrating outstanding academic and research achievements will receive recommendations from the department head, with final selection by the college dean.",
+    "collected_at": "2026-10-26T13:49:47+00:00",
     "score": 60,
     "matched_criteria": [
       "réservée à un niveau doctoral",
@@ -3084,5 +3084,61 @@
     "score_max": 100,
     "identite": "NTNU - Master's programmes in English|manufacturing 4 0 by intelligent and sustainable technologies|?",
     "first_seen_at": "2026-09-29T13:42:10+00:00"
+  },
+  {
+    "title": "Biotechnology and Food Science",
+    "university": "Norwegian University of Science and Technology",
+    "country": "Norway",
+    "degree": null,
+    "field": null,
+    "url": "https://www.ntnu.edu/studies/msbiomat",
+    "source": "NTNU - Master's programmes in English",
+    "type": "programs",
+    "deadline": null,
+    "funding_type": null,
+    "funding_amount": null,
+    "language": null,
+    "eligibility": [],
+    "description": null,
+    "collected_at": "2026-10-26T13:49:43+00:00",
+    "score": 15,
+    "matched_criteria": [
+      "aucun terme du profil dans les informations publiées",
+      "titre Biotechnology and Food Science, hors de la liste visée",
+      "pays Norway",
+      "langue non publiée"
+    ],
+    "matched": false,
+    "score_max": 100,
+    "identite": "NTNU - Master's programmes in English|biotechnology and food science|?",
+    "first_seen_at": "2026-10-26T13:49:43+00:00"
+  },
+  {
+    "title": "Project Management - Science",
+    "university": "Norwegian University of Science and Technology",
+    "country": "Norway",
+    "degree": null,
+    "field": null,
+    "url": "https://www.ntnu.edu/studies/msproman",
+    "source": "NTNU - Master's programmes in English",
+    "type": "programs",
+    "deadline": null,
+    "funding_type": null,
+    "funding_amount": null,
+    "language": null,
+    "eligibility": [],
+    "description": null,
+    "collected_at": "2026-10-26T13:49:43+00:00",
+    "score": 15,
+    "matched_criteria": [
+      "aucun terme du profil dans les informations publiées",
+      "titre Project Management - Science, hors de la liste visée",
+      "pays Norway",
+      "langue non publiée"
+    ],
+    "matched": false,
+    "score_max": 100,
+    "identite": "NTNU - Master's programmes in English|project management science|?",
+    "first_seen_at": "2026-10-26T13:49:43+00:00"
   }
 ]
