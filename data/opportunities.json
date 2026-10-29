@@ -3114,7 +3114,7 @@
     "first_seen_at": "2026-10-26T13:49:43+00:00"
   },
   {
-    "title": "Project Management - Science",
+    "title": "Project Management, Science",
     "university": "Norwegian University of Science and Technology",
     "country": "Norway",
     "degree": null,
@@ -3128,11 +3128,11 @@
     "language": null,
     "eligibility": [],
     "description": null,
-    "collected_at": "2026-10-26T13:49:43+00:00",
+    "collected_at": "2026-10-29T13:54:43+00:00",
     "score": 15,
     "matched_criteria": [
       "aucun terme du profil dans les informations publiées",
-      "titre Project Management - Science, hors de la liste visée",
+      "titre Project Management, Science, hors de la liste visée",
       "pays Norway",
       "langue non publiée"
     ],
@@ -3140,5 +3140,33 @@
     "score_max": 100,
     "identite": "NTNU - Master's programmes in English|project management science|?",
     "first_seen_at": "2026-10-26T13:49:43+00:00"
+  },
+  {
+    "title": "Project Management, Engineering",
+    "university": "Norwegian University of Science and Technology",
+    "country": "Norway",
+    "degree": null,
+    "field": null,
+    "url": "https://www.ntnu.edu/studies/msproman",
+    "source": "NTNU - Master's programmes in English",
+    "type": "programs",
+    "deadline": null,
+    "funding_type": null,
+    "funding_amount": null,
+    "language": null,
+    "eligibility": [],
+    "description": null,
+    "collected_at": "2026-10-29T13:54:43+00:00",
+    "score": 15,
+    "matched_criteria": [
+      "aucun terme du profil dans les informations publiées",
+      "titre Project Management, Engineering, hors de la liste visée",
+      "pays Norway",
+      "langue non publiée"
+    ],
+    "matched": false,
+    "score_max": 100,
+    "identite": "NTNU - Master's programmes in English|project management engineering|?",
+    "first_seen_at": "2026-10-29T13:54:43+00:00"
   }
 ]
